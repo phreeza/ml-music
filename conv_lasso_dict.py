@@ -35,27 +35,21 @@ class ConvDictLearn(object):
         self.params = [self.A, self.D]
 
     def prediction_A(self):
-        def norm(x):
-            return x / T.sqrt((x * x).sum(axis=1, keepdims=True))
-
-        return conv2d(self.A.dimshuffle(0, 1, 'x', 2), norm(self.D).dimshuffle('x', 0, 'x', 1), border_mode='full')[:,
+        return conv2d(self.A.dimshuffle(0, 1, 'x', 2), self.D.dimshuffle('x', 0, 'x', 1), border_mode='full')[:,
                0, 0, :]
 
     def cost_A(self, X):
-        return T.std((X - self.prediction_A())) + self.alpha * T.mean(abs(self.A))
+        return T.sum((X - self.prediction_A())**2) + self.alpha * T.mean(abs(self.A))
 
     def prediction_D(self, index):
-        def norm(x):
-            return x / T.sqrt((x * x).sum(axis=1, keepdims=True))
-
         return conv2d(self.A[index * self.batch_size: (index + 1) * self.batch_size,:,:].dimshuffle(0, 1, 'x', 2),
                       norm(self.D).dimshuffle('x', 0, 'x', 1), border_mode='full')[:, 0, 0, :]
 
     def cost_D(self, X, index):
-        return T.std(X - self.prediction_D(index))
+        return T.sum((X - self.prediction_D(index))**2)
 
 
-def sgd_optimization_dict(learning_rate_A=0.001, learning_rate_D=0.1, n_epochs_outer=10, n_epochs_A=30, n_epochs_D=30,
+def sgd_optimization_dict(learning_rate_A=0.1, learning_rate_D=1000., n_epochs_outer=10, n_epochs_A=30, n_epochs_D=30,
                           batch_size=4):
     import pydub
     import time
@@ -92,8 +86,12 @@ def sgd_optimization_dict(learning_rate_A=0.001, learning_rate_D=0.1, n_epochs_o
     g_A = T.grad(cost=cost_A, wrt=learner.A)
     g_D = T.grad(cost=cost_D, wrt=learner.D)
 
+    def norm(x):
+        return x / T.sqrt((x * x).sum(axis=1, keepdims=True))
+
+
     updates_A = [(learner.A, learner.A - learning_rate_A * g_A)]
-    updates_D = [(learner.D, learner.D - learning_rate_D * g_D)]
+    updates_D = [(learner.D, norm(learner.D - learning_rate_D * g_D))]
 
     train_A = theano.function(
         inputs=[],
@@ -110,7 +108,6 @@ def sgd_optimization_dict(learning_rate_A=0.001, learning_rate_D=0.1, n_epochs_o
         updates=updates_D,
         givens={
             X: data[index * batch_size: (index + 1) * batch_size, :],
-            index: index
         }
     )
 
@@ -133,8 +130,8 @@ def sgd_optimization_dict(learning_rate_A=0.001, learning_rate_D=0.1, n_epochs_o
                 )
 
             for e_D in xrange(n_epochs_D):
-                cost = train_D(minibatch_index)
                 for minibatch_index in xrange(n_batches):
+                    cost = train_D(minibatch_index)
                     print(
                         'epoch %i, minibatch %i/%i, D-step %i cost %f' %
                         (

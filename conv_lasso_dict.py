@@ -49,7 +49,7 @@ class ConvDictLearn(object):
         return T.sum((X - self.prediction_D(index))**2)
 
 
-def sgd_optimization_dict(learning_rate_A=0.1, learning_rate_D=1000., n_epochs_outer=10, n_epochs_A=30, n_epochs_D=30,
+def sgd_optimization_dict(learning_rate_A=0.1, learning_rate_D=0.1, n_epochs_outer=10, n_epochs_A=30, n_epochs_D=30,
                           batch_size=4):
     import pydub
     import time
@@ -64,7 +64,7 @@ def sgd_optimization_dict(learning_rate_A=0.1, learning_rate_D=1000., n_epochs_o
 
     track_seconds = 4.
     track_len = int(44100 * track_seconds)
-    n_tracks = min(1000, (data.shape[0] // track_len))
+    n_tracks = 24 # min(1000, (data.shape[0] // track_len))
 
     D_init = np.zeros((100, 44100 / 400))
     for n in range(100):
@@ -81,7 +81,7 @@ def sgd_optimization_dict(learning_rate_A=0.1, learning_rate_D=1000., n_epochs_o
     learner = ConvDictLearn(n_tracks, batch_size, track_len, n_filters=100, filter_len=44100 / 400, alpha=1e4, D_init=D_init)
 
     cost_A = learner.cost_A(X)
-    cost_D = learner.cost_D(X)
+    cost_D = learner.cost_D(X, index)
 
     g_A = T.grad(cost=cost_A, wrt=learner.A)
     g_D = T.grad(cost=cost_D, wrt=learner.D)
@@ -131,7 +131,7 @@ def sgd_optimization_dict(learning_rate_A=0.1, learning_rate_D=1000., n_epochs_o
 
             for e_D in xrange(n_epochs_D):
                 for minibatch_index in xrange(n_batches):
-                    cost = train_D(minibatch_index)
+		    cost = train_D(minibatch_index)
                     print(
                         'epoch %i, minibatch %i/%i, D-step %i cost %f' %
                         (

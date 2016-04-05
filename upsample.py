@@ -26,7 +26,7 @@ class Unpooling1D(Layer):
 
 filter_len = 44100
 subsample = 4410
-filters = 5
+filters = 200
 model = Sequential()
 model.add(Convolution1D(2,filters,filter_len,subsample_length=subsample,activation='tanh'))
 model.add(Unpooling1D(subsample_length=subsample))
@@ -41,8 +41,8 @@ data -= data.min()
 data /= data.max() / 2.
 data -= 1.
 
-print np.corrcoef(data[0,:,0],data[0,:,1])
-from keras.utils.layer_utils import print_layer_shapes
-print_layer_shapes(model,data.shape)
+#print np.corrcoef(data[0,:,0],data[0,:,1])
+#from keras.utils.layer_utils import print_layer_shapes
+#print_layer_shapes(model,data.shape)
 
 model.fit(data,data)

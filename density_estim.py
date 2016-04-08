@@ -7,7 +7,7 @@ from numpy import fft
 import scipy
 sys.path.append('/home/mccolgan/PyCharm Projects/keras')
 from keras.layers.core import Flatten,Dense,Dropout
-from keras.layers.convolutional import Convolution1D
+from keras.layers.convolutional import Convolution1D,Convolution2D
 from keras.models import Graph,Sequential
 from keras.optimizers import RMSprop,Adagrad,SGD
 from keras.layers.recurrent import LSTM
@@ -63,24 +63,24 @@ for n in range(2):
     data_stft.append(stft(data[:,n]))
 data_stft = np.array(data_stft)
 
-n_frames_in = 46
+n_frames_in = 22
 n_examples = (data_stft.shape[1]-n_frames_in-1)
 nf = data_stft.shape[2]
 
-X = np.zeros((n_examples,nf+45,n_frames_in,4))
-Y = np.zeros((n_examples,nf,1,4))
+X = np.zeros((n_examples,4,nf+45,n_frames_in))
+Y = np.zeros((n_examples,4,nf,1))
 
 for n in range(n_examples):
     i = n#np.random.randint(data_stft.shape[1]-n_frames_in-1)
-    X[n,22:-23,:,0] = np.angle(data_stft[0,i:i+n_frames_in,:nf]).T
-    X[n,22:-23,:,1] = np.angle(data_stft[1,i:i+n_frames_in,:nf]).T
-    X[n,22:-23,:,2] = np.log(np.abs(data_stft[0,i:i+n_frames_in,:nf])+1e-6).T
-    X[n,22:-23,:,3] = np.log(np.abs(data_stft[1,i:i+n_frames_in,:nf])+1e-6).T
+    X[n,0,22:22+nf,:] = np.angle(data_stft[0,i:i+n_frames_in,:nf]).T
+    X[n,1,22:22+nf,:] = np.angle(data_stft[1,i:i+n_frames_in,:nf]).T
+    X[n,2,22:22+nf,:] = np.log(np.abs(data_stft[0,i:i+n_frames_in,:nf])+1e-6).T
+    X[n,3,22:22+nf,:] = np.log(np.abs(data_stft[1,i:i+n_frames_in,:nf])+1e-6).T
 
-    Y[n,:,0,0] = np.angle(data_stft[0,i+n_frames_in,:nf])
-    Y[n,:,0,1] = np.angle(data_stft[1,i+n_frames_in,:nf])
-    Y[n,:,0,2] = np.log(np.abs(data_stft[0,i+n_frames_in,:nf])+1e-6)
-    Y[n,:,0,3] = np.log(np.abs(data_stft[1,i+n_frames_in,:nf])+1e-6)
+    Y[n,0,:,0] = np.angle(data_stft[0,i+n_frames_in,:nf])
+    Y[n,1,:,0] = np.angle(data_stft[1,i+n_frames_in,:nf])
+    Y[n,2,:,0] = np.log(np.abs(data_stft[0,i+n_frames_in,:nf])+1e-6)
+    Y[n,3,:,0] = np.log(np.abs(data_stft[1,i+n_frames_in,:nf])+1e-6)
 
 std_fact = 1.
 Ym = Y.mean(axis=0)
@@ -90,8 +90,8 @@ Ys[:,:2] = 2*np.pi/np.sqrt(12.)*std_fact
 Ys[Ys==0.] = 1.
 Y = (Y-Ym)/Ys
 def phase_dist(y_true, y_pred):
-    return (std_fact*(T.mean(T.square(y_pred[:,:,2:] - y_true[:,:,2:]),axis=[1,2]))
-            + T.mean((1. - T.cos(((y_pred*Ys+Ym)[:,:,:2] - (y_true*Ys+Ym)[:,:,:2]))),axis=[1,2]))/2
+    return (std_fact*(T.mean(T.square(y_pred[:,2:,:,:] - y_true[:,2:,:,:]),axis=[1,2,3]))
+            + T.mean((1. - T.cos(((y_pred*Ys+Ym)[:,:2,:,:] - (y_true*Ys+Ym)[:,:2,:,:]))),axis=[1,2,3]))/2
 
 def phase_dist_split(y_true, y_pred):
     return std_fact*T.concatenate(
@@ -107,11 +107,11 @@ def reconstruct(Y_raw,name='foo'):
     wavfile.write(name+'.wav',44100,(data_out).T)
 
 model = Sequential()
-model.add(Convolution2D(10,16,16,activation='tanh',border_mode='valid'  ,W_constraint=maxnorm(),b_constraint=maxnorm(),W_regularizer=l2(1e-5),input_shape=X.shape[1:]))
+model.add(Convolution2D(4,16,8,activation='tanh',border_mode='valid'  ,W_constraint=maxnorm(),b_constraint=maxnorm(),W_regularizer=l2(1e-5),input_shape=X.shape[1:],dim_ordering='th'))
 model.add(Dropout(0.3))
-model.add(Convolution2D(10,16,16,activation='tanh',border_mode='valid'  ,W_constraint=maxnorm(),b_constraint=maxnorm(),W_regularizer=l2(1e-5)))
+model.add(Convolution2D(4,16,8,activation='tanh',border_mode='valid'  ,W_constraint=maxnorm(),b_constraint=maxnorm(),W_regularizer=l2(1e-5),dim_ordering='th'))
 model.add(Dropout(0.3))
-model.add(Convolution2D(4,16,16,activation='linear',border_mode='valid',W_constraint=maxnorm(),b_constraint=maxnorm(),W_regularizer=l2(1e-5)))
+model.add(Convolution2D(4,16,8,activation='linear',border_mode='valid',W_constraint=maxnorm(),b_constraint=maxnorm(),W_regularizer=l2(1e-5),dim_ordering='th'))
 #model.compile(SGD(clipnorm=0.1),loss=phase_dist,mode=theano.compile.MonitorMode(
 #                        post_func=detect_nan))
 model.compile(RMSprop(clipnorm=0.1),loss=phase_dist)

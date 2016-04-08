@@ -13,11 +13,21 @@ from keras.optimizers import RMSprop,Adagrad,SGD
 from keras.layers.recurrent import LSTM
 from keras.layers.normalization import BatchNormalization
 from keras.regularizers import l2
+from keras.constraints import maxnorm
 from theano import tensor as T
 
 import pydub
 import time
 
+def detect_nan(i, node, fn):
+    for output in fn.outputs:
+        if (not isinstance(output[0], np.random.RandomState) and
+            np.isnan(output[0]).any()):
+            print('*** NaN detected ***')
+            theano.printing.debugprint(node)
+            print('Inputs : %s' % [input[0] for input in fn.inputs])
+            print('Outputs: %s' % [output[0] for output in fn.outputs])
+            raise Exception
 
 def stft(x, fftsize=1024, overlap=1):
     hop = fftsize / overlap
@@ -48,47 +58,46 @@ def loadf(fname):
     return data
 #data = np.vstack([loadf('Kimiko_Ishizaka_-_01_-_Aria.mp3'),loadf('07_-_Brad_Sucks_-_Total_Breakdown.mp3')])
 data = loadf('Kimiko_Ishizaka_-_01_-_Aria.mp3')
-print data.shape
 data_stft = []
 for n in range(2):
     data_stft.append(stft(data[:,n]))
 data_stft = np.array(data_stft)
 
-n_frames_in = 6
+n_frames_in = 46
 n_examples = (data_stft.shape[1]-n_frames_in-1)
 nf = data_stft.shape[2]
 
-X = np.zeros((n_examples,n_frames_in,data_stft.shape[0]*nf*2))
-Y = np.zeros((n_examples,data_stft.shape[0]*nf*2))
+X = np.zeros((n_examples,nf+45,n_frames_in,4))
+Y = np.zeros((n_examples,nf,1,4))
 
 for n in range(n_examples):
     i = n#np.random.randint(data_stft.shape[1]-n_frames_in-1)
-    X[n,:,:nf] = np.log(np.abs(data_stft[0,i:i+n_frames_in,:nf])+1e-6)
-    X[n,:,nf:2*nf] = np.log(np.abs(data_stft[1,i:i+n_frames_in,:nf])+1e-6)
-    X[n,:,2*nf:3*nf] = np.angle(data_stft[0,i:i+n_frames_in,:nf])
-    X[n,:,3*nf:] = np.angle(data_stft[1,i:i+n_frames_in,:nf])
+    X[n,22:-23,:,0] = np.angle(data_stft[0,i:i+n_frames_in,:nf]).T
+    X[n,22:-23,:,1] = np.angle(data_stft[1,i:i+n_frames_in,:nf]).T
+    X[n,22:-23,:,2] = np.log(np.abs(data_stft[0,i:i+n_frames_in,:nf])+1e-6).T
+    X[n,22:-23,:,3] = np.log(np.abs(data_stft[1,i:i+n_frames_in,:nf])+1e-6).T
 
-    Y[n,:nf] = np.log(np.abs(data_stft[0,i+n_frames_in,:nf])+1e-6)
-    Y[n,nf:2*nf] = np.log(np.abs(data_stft[1,i+n_frames_in,:nf])+1e-6)
-    Y[n,2*nf:3*nf] = np.angle(data_stft[0,i+n_frames_in,:nf])
-    Y[n,3*nf:] = np.angle(data_stft[1,i+n_frames_in,:nf])
+    Y[n,:,0,0] = np.angle(data_stft[0,i+n_frames_in,:nf])
+    Y[n,:,0,1] = np.angle(data_stft[1,i+n_frames_in,:nf])
+    Y[n,:,0,2] = np.log(np.abs(data_stft[0,i+n_frames_in,:nf])+1e-6)
+    Y[n,:,0,3] = np.log(np.abs(data_stft[1,i+n_frames_in,:nf])+1e-6)
 
-std_fact = 10.
+std_fact = 1.
 Ym = Y.mean(axis=0)
+Ym[:,:2] = 0. #Y.mean(axis=0)
 Ys = Y.std(axis=0)*std_fact
+Ys[:,:2] = 2*np.pi/np.sqrt(12.)*std_fact
 Ys[Ys==0.] = 1.
 Y = (Y-Ym)/Ys
 def phase_dist(y_true, y_pred):
-    
-    #return (T.mean((1. - T.cos(((y_pred*Ys+Ym)[:,2*nf:] - (y_true*Ys+Ym)[:,2*nf:]))), axis=-1)
-    #        + 10*T.mean(T.maximum(T.abs_((y_true - y_pred)*Ys)[:,2*nf:]-3*np.pi,0.),axis=-1))
-    return (std_fact*T.sqrt(T.mean(T.square(y_pred[:,:2*nf] - y_true[:,:2*nf]), axis=-1))
-            + T.mean(T.exp((y_true*Ys+Ym)[:,:2*nf])*(1. - T.cos(((y_pred*Ys+Ym)[:,2*nf:] - (y_true*Ys+Ym)[:,2*nf:]))), axis=-1)/T.mean(T.exp((y_true*Ys+Ym)[:,:2*nf]))
-            + 10*T.mean(T.maximum(T.abs_((y_true - y_pred)*Ys)[:,2*nf:]-3*np.pi,0.),axis=-1))
+    return (std_fact*(T.mean(T.square(y_pred[:,:,2:] - y_true[:,:,2:]),axis=[1,2]))
+            + T.mean((1. - T.cos(((y_pred*Ys+Ym)[:,:,:2] - (y_true*Ys+Ym)[:,:,:2]))),axis=[1,2]))/2
 
 def phase_dist_split(y_true, y_pred):
-    return (std_fact*T.sqrt(T.mean(T.square(y_pred[:,:2*nf] - y_true[:,:2*nf]), axis=-1)),
-            2*T.mean(T.exp((y_true*Ys+Ym)[:,:2*nf])*(1. - T.cos(((y_pred*Ys+Ym)[:,2*nf:] - (y_true*Ys+Ym)[:,2*nf:]))), axis=-1) , 10*T.mean(T.maximum(T.abs_((y_true - y_pred)*Ys)[:,2*nf:]-3*np.pi,0.),axis=-1))
+    return std_fact*T.concatenate(
+        [(1. - T.cos(((y_pred*Ys+Ym)[:,:,:2] - (y_true*Ys+Ym)[:,:,:2]))),
+        T.square(y_pred[:,:,2:] - y_true[:,:,2:])],
+        axis=2)
 
 from scipy.io import wavfile
 def reconstruct(Y_raw,name='foo'):
@@ -98,12 +107,12 @@ def reconstruct(Y_raw,name='foo'):
     wavfile.write(name+'.wav',44100,(data_out).T)
 
 model = Sequential()
-model.add(Flatten(input_shape=(X.shape[1],X.shape[2])))
-model.add(Dense(8*nf,activation='relu',W_regularizer=l2(1e-6), input_shape=(Y.shape[1],)))
+model.add(Convolution2D(10,16,16,activation='tanh',border_mode='valid'  ,W_constraint=maxnorm(),b_constraint=maxnorm(),W_regularizer=l2(1e-5),input_shape=X.shape[1:]))
 model.add(Dropout(0.3))
-model.add(Dense(5*nf,activation='relu',W_regularizer=l2(1e-6)))
+model.add(Convolution2D(10,16,16,activation='tanh',border_mode='valid'  ,W_constraint=maxnorm(),b_constraint=maxnorm(),W_regularizer=l2(1e-5)))
 model.add(Dropout(0.3))
-model.add(Dense(Y.shape[1],activation='tanh'))
-
+model.add(Convolution2D(4,16,16,activation='linear',border_mode='valid',W_constraint=maxnorm(),b_constraint=maxnorm(),W_regularizer=l2(1e-5)))
+#model.compile(SGD(clipnorm=0.1),loss=phase_dist,mode=theano.compile.MonitorMode(
+#                        post_func=detect_nan))
 model.compile(RMSprop(clipnorm=0.1),loss=phase_dist)
 h = model.fit(X,Y,validation_split=0.2,batch_size=128,nb_epoch=1000)

@@ -29,7 +29,7 @@ def detect_nan(i, node, fn):
             print('Outputs: %s' % [output[0] for output in fn.outputs])
             raise Exception
 
-def stft(x, fftsize=1024, overlap=1):
+def stft(x, fftsize=512, overlap=1):
     hop = fftsize / overlap
     w = scipy.hanning(fftsize+1)[:-1]      # better reconstruction with this trick +1)[:-1]  
     return np.array([np.fft.rfft(w*x[i:i+fftsize]) for i in range(0, len(x)-fftsize, hop)])
@@ -107,12 +107,12 @@ def reconstruct(Y_raw,name='foo'):
     wavfile.write(name+'.wav',44100,(data_out).T)
 
 model = Sequential()
-model.add(Convolution2D(4,16,8,activation='tanh',border_mode='valid'  ,W_constraint=maxnorm(),b_constraint=maxnorm(),W_regularizer=l2(1e-5),input_shape=X.shape[1:],dim_ordering='th'))
+model.add(Convolution2D(16,16,8,activation='tanh',border_mode='valid'  ,W_constraint=maxnorm(),b_constraint=maxnorm(),W_regularizer=l2(1e-5),input_shape=X.shape[1:],dim_ordering='th'))
 model.add(Dropout(0.3))
-model.add(Convolution2D(4,16,8,activation='tanh',border_mode='valid'  ,W_constraint=maxnorm(),b_constraint=maxnorm(),W_regularizer=l2(1e-5),dim_ordering='th'))
+model.add(Convolution2D(16,16,8,activation='tanh',border_mode='valid'  ,W_constraint=maxnorm(),b_constraint=maxnorm(),W_regularizer=l2(1e-5),dim_ordering='th'))
 model.add(Dropout(0.3))
 model.add(Convolution2D(4,16,8,activation='linear',border_mode='valid',W_constraint=maxnorm(),b_constraint=maxnorm(),W_regularizer=l2(1e-5),dim_ordering='th'))
 #model.compile(SGD(clipnorm=0.1),loss=phase_dist,mode=theano.compile.MonitorMode(
 #                        post_func=detect_nan))
 model.compile(RMSprop(clipnorm=0.1),loss=phase_dist)
-h = model.fit(X,Y,validation_split=0.2,batch_size=128,nb_epoch=1000)
+h = model.fit(X,Y,validation_split=0.2,batch_size=64,nb_epoch=1000)

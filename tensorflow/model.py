@@ -1,6 +1,4 @@
 import tensorflow as tf
-from tensorflow.models.rnn import rnn_cell
-from tensorflow.models.rnn import seq2seq
 
 import numpy as np
 import random
@@ -28,12 +26,12 @@ class Model():
 
         def get_mixture_coef(output):
             z = output
-            z_pi = z[:self.num_mixture]
-            z_mu = z[self.num_mixture:(26+1024+1)*self.num_mixture]
-            z_sigma = z[(26+1024+1)*self.num_mixture:]
+            z_pi = z[:,:self.num_mixture]
+            z_mu = z[:,self.num_mixture:(26+1024+1)*self.num_mixture]
+            z_sigma = z[:,(26+1024+1)*self.num_mixture:]
 
             # apply transformations
-            z_pi = tf.nn.softmaxl(z_pi)
+            z_pi = tf.nn.softmax(z_pi)
             z_sigma = tf.exp(z_sigma)
 
             return [z_pi, z_mu, z_sigma]
@@ -44,25 +42,25 @@ class Model():
             args.seq_length = 1
 
         if args.model == 'rnn':
-            cell_fn = rnn_cell.BasicRNNCell
+            cell_fn = tf.nn.rnn_cell.BasicRNNCell
         elif args.model == 'gru':
-            cell_fn = rnn_cell.GRUCell
+            cell_fn = tf.nn.rnn_cell.GRUCell
         elif args.model == 'lstm':
-            cell_fn = rnn_cell.BasicLSTMCell
+            cell_fn = tf.nn.rnn_cell.BasicLSTMCell
         else:
             raise Exception("model type not supported: {}".format(args.model))
 
         cell = cell_fn(args.rnn_size)
 
-        cell = rnn_cell.MultiRNNCell([cell] * args.num_layers)
+        cell = tf.nn.rnn_cell.MultiRNNCell([cell] * args.num_layers)
 
         if (infer == False and args.keep_prob < 1): # training mode
-            cell = rnn_cell.DropoutWrapper(cell, output_keep_prob = args.keep_prob)
+            cell = tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob = args.keep_prob)
 
         self.cell = cell
 
-        self.input_data = tf.placeholder(dtype=tf.float32, shape=[None, args.seq_length, 1024 + 26])
-        self.target_data = tf.placeholder(dtype=tf.float32, shape=[None, args.seq_length, 1024 + 26])
+        self.input_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, 1024 + 26], name='input_data')
+        self.target_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, 1024 + 26],name = 'target_data')
         self.initial_state = cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)
 
         self.num_mixture = args.num_mixture
@@ -74,10 +72,13 @@ class Model():
             output_w = tf.get_variable("output_w", [args.rnn_size, NOUT])
             output_b = tf.get_variable("output_b", [NOUT])
 
-        inputs = tf.split(1, args.seq_length, self.input_data)
-        inputs = [tf.squeeze(input_, [1]) for input_ in inputs]
+        #inputs = tf.split(1, args.seq_length, self.input_data)
+        #inputs = [tf.squeeze(input_, [1]) for input_ in inputs]
+        inputs = tf.unpack(tf.transpose(self.input_data, perm=(1,0,2)))
+        print self.input_data
+        print inputs[0]
 
-        outputs, last_state = seq2seq.rnn_decoder(inputs, self.initial_state, cell, loop_function=None, scope='rnnlm')
+        outputs, last_state = tf.nn.seq2seq.rnn_decoder(inputs, self.initial_state, cell, loop_function=None, scope='rnnlm')
         output = tf.reshape(tf.concat(1, outputs), [-1, args.rnn_size])
         output = tf.nn.xw_plus_b(output, output_w, output_b)
         self.final_state = last_state
@@ -91,7 +92,7 @@ class Model():
         self.mu = o_mu
         self.sigma = o_sigma
 
-        lossfunc = get_lossfunc(o_pi, o_mu, o_sigma, data)
+        lossfunc = get_lossfunc(o_pi, o_mu, o_sigma, flat_target_data)
         self.cost = lossfunc / (args.batch_size * args.seq_length)
 
         self.lr = tf.Variable(0.0, trainable=False)

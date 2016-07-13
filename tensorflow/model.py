@@ -9,17 +9,16 @@ class Model():
         def tf_normal(x, mu, s):
             # eq # 24 and 25 of http://arxiv.org/abs/1308.0850
             norm = tf.sub(x, mu)
-            z = tf.reduce_sum(tf.square(tf.div(norm, s)),1)
-            result = tf.exp(-z)
-            denom = 2*np.pi*tf.reduce_prod(s, 1)
+            z = tf.reduce_sum(tf.div(tf.square(norm), s),1)
+            result = tf.exp(-z/2)
+            denom = tf.sqrt(tf.reduce_prod(2*np.pi*s, 1))
             result = tf.div(result, denom)
             return result
 
         def get_lossfunc(z_pi, z_mu,  z_sigma, x):
             result = tf_normal(x, z_mu, z_sigma)
-            epsilon = 1e-20
-            result = tf.mul(result, z_pi)
-            result = tf.reduce_sum(result, 1, keep_dims=True)
+            #result = tf.mul(result, z_pi)
+            #result = tf.reduce_sum(result, 1, keep_dims=True)
             result = -tf.log(tf.maximum(result, 1e-20))
 
             return tf.reduce_sum(result)
@@ -27,8 +26,8 @@ class Model():
         def get_mixture_coef(output):
             z = output
             z_pi = z[:,:self.num_mixture]
-            z_mu = z[:,self.num_mixture:(26+1024+1)*self.num_mixture]
-            z_sigma = z[:,(26+1024+1)*self.num_mixture:]
+            z_mu = z[:,self.num_mixture:int(args.chunk_samples+1)*self.num_mixture]
+            z_sigma = z[:,int(args.chunk_samples+1)*self.num_mixture:]
 
             # apply transformations
             z_pi = tf.nn.softmax(z_pi)
@@ -59,14 +58,14 @@ class Model():
 
         self.cell = cell
 
-        self.input_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, 1024 + 26], name='input_data')
-        self.target_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, 1024 + 26],name = 'target_data')
+        self.input_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, int(args.chunk_samples)], name='input_data')
+        self.target_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, int(args.chunk_samples)],name = 'target_data')
         self.initial_state = cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)
 
         self.num_mixture = args.num_mixture
 
         # 
-        NOUT = self.num_mixture * (1 + 2*(1024 + 26))
+        NOUT = self.num_mixture * (1 + 2*(args.chunk_samples))
 
         with tf.variable_scope('rnnlm'):
             output_w = tf.get_variable("output_w", [args.rnn_size, NOUT])
@@ -75,8 +74,6 @@ class Model():
         #inputs = tf.split(1, args.seq_length, self.input_data)
         #inputs = [tf.squeeze(input_, [1]) for input_ in inputs]
         inputs = tf.unpack(tf.transpose(self.input_data, perm=(1,0,2)))
-        print self.input_data
-        print inputs[0]
 
         outputs, last_state = tf.nn.seq2seq.rnn_decoder(inputs, self.initial_state, cell, loop_function=None, scope='rnnlm')
         output = tf.reshape(tf.concat(1, outputs), [-1, args.rnn_size])
@@ -84,7 +81,7 @@ class Model():
         self.final_state = last_state
 
         # reshape target data so that it is compatible with prediction shape
-        flat_target_data = tf.reshape(self.target_data,[-1, 1024 + 26])
+        flat_target_data = tf.reshape(self.target_data,[-1, int(args.chunk_samples)])
 
         [o_pi, o_mu, o_sigma] = get_mixture_coef(output)
 
@@ -97,6 +94,10 @@ class Model():
 
         self.lr = tf.Variable(0.0, trainable=False)
         tvars = tf.trainable_variables()
-        grads, _ = tf.clip_by_global_norm(tf.gradients(self.cost, tvars), args.grad_clip)
+        grads = tf.gradients(self.cost, tvars)
+        grads = tf.cond(
+            tf.global_norm(grads) > 1e-20,
+            lambda: tf.clip_by_global_norm(tf.gradients(self.cost, tvars), args.grad_clip)[0],
+            lambda: grads)
         optimizer = tf.train.AdamOptimizer(self.lr)
         self.train_op = optimizer.apply_gradients(zip(grads, tvars))

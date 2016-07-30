@@ -9,29 +9,30 @@ class Model():
         def tf_normal(x, mu, s):
             # eq # 24 and 25 of http://arxiv.org/abs/1308.0850
             norm = tf.sub(x, mu)
+            #tf.histogram_summary('z-score', tf.div(norm,tf.sqrt(s)))
+            #tf.histogram_summary('std-dev', tf.sqrt(s))
             z = tf.reduce_sum(tf.div(tf.square(norm), s),1)
-            result = tf.exp(-z/2)
-            denom = tf.sqrt(tf.reduce_prod(2*np.pi*s, 1))
-            result = tf.div(result, denom)
+            denom_log = tf.reduce_sum(tf.log(tf.sqrt(2*np.pi*s)), 1,name="denom_log")
+            result = -z/2-denom_log
             return result
 
         def get_lossfunc(z_pi, z_mu,  z_sigma, x):
-            result = tf_normal(x, z_mu, z_sigma)
+            result = -tf_normal(x, z_mu, z_sigma)
             #result = tf.mul(result, z_pi)
             #result = tf.reduce_sum(result, 1, keep_dims=True)
-            result = -tf.log(tf.maximum(result, 1e-20))
+            #result = -tf.log(tf.maximum(result, 1e-30))
 
             return tf.reduce_sum(result)
 
         def get_mixture_coef(output):
             z = output
             z_pi = z[:,:self.num_mixture]
-            z_mu = z[:,self.num_mixture:int(args.chunk_samples+1)*self.num_mixture]
-            z_sigma = z[:,int(args.chunk_samples+1)*self.num_mixture:]
+            z_mu = z[:,self.num_mixture:(args.chunk_samples+1)*self.num_mixture]
+            z_sigma = z[:,(args.chunk_samples+1)*self.num_mixture:]
 
             # apply transformations
-            z_pi = tf.nn.softmax(z_pi)
-            z_sigma = tf.exp(z_sigma)
+            z_pi = tf.nn.softmax(z_pi, name='z_pi')
+            z_sigma = tf.exp(z_sigma, name='z_sigma')
 
             return [z_pi, z_mu, z_sigma]
 
@@ -58,8 +59,8 @@ class Model():
 
         self.cell = cell
 
-        self.input_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, int(args.chunk_samples)], name='input_data')
-        self.target_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, int(args.chunk_samples)],name = 'target_data')
+        self.input_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, args.chunk_samples], name='input_data')
+        self.target_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, args.chunk_samples],name = 'target_data')
         self.initial_state = cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)
 
         self.num_mixture = args.num_mixture
@@ -81,7 +82,7 @@ class Model():
         self.final_state = last_state
 
         # reshape target data so that it is compatible with prediction shape
-        flat_target_data = tf.reshape(self.target_data,[-1, int(args.chunk_samples)])
+        flat_target_data = tf.reshape(self.target_data,[-1, args.chunk_samples])
 
         [o_pi, o_mu, o_sigma] = get_mixture_coef(output)
 
@@ -91,6 +92,8 @@ class Model():
 
         lossfunc = get_lossfunc(o_pi, o_mu, o_sigma, flat_target_data)
         self.cost = lossfunc / (args.batch_size * args.seq_length)
+        tf.scalar_summary('cost', self.cost)
+
 
         self.lr = tf.Variable(0.0, trainable=False)
         tvars = tf.trainable_variables()

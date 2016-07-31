@@ -64,6 +64,7 @@ def train(args):
 
     fname = '../Kimiko_Ishizaka_-_01_-_Aria.mp3'
     data = util.load_data(fname,args.chunk_samples-26)
+    util.write_data(data)
     print data.shape
     with open(os.path.join('save', 'config.pkl'), 'w') as f:
         cPickle.dump(args, f)

@@ -45,7 +45,17 @@ def next_batch(data, args):
     x_batch = []
     y_batch = []
     for i in xrange(args.batch_size):
-        idx = np.random.randint(0, data.shape[0]-args.seq_length-2)
+        idx = np.random.randint(1000, data.shape[0]-args.seq_length-2)
+        x_batch.append(np.copy(data[idx:idx+args.seq_length]))
+        y_batch.append(np.copy(data[idx+1:idx+args.seq_length+1]))
+    return np.array(x_batch), np.array(y_batch)
+
+def next_val_batch(data, args):
+    # returns a randomised, seq_length sized portion of the training data
+    x_batch = []
+    y_batch = []
+    for i in xrange(args.batch_size):
+        idx = np.random.randint(0,1000)
         x_batch.append(np.copy(data[idx:idx+args.seq_length]))
         y_batch.append(np.copy(data[idx+1:idx+args.seq_length+1]))
     return np.array(x_batch), np.array(y_batch)
@@ -87,6 +97,13 @@ def train(args):
                     checkpoint_path = os.path.join('save', 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step = e * 10 + b)
                     print "model saved to {}".format(checkpoint_path)
+            x,y = next_val_batch(data,args)
+            feed = {model.input_data: x, model.target_data: y, model.initial_state: state}
+            test_loss, state = sess.run([model.cost, model.final_state], feed)
+            print ">> {}/{} (epoch {}), test_loss = {:.3f}, time/batch = {:.3f}" \
+                .format(e * 10 + b,
+                        args.num_epochs * 10,
+                        e, test_loss, end - start)
 
 if __name__ == '__main__':
   main()

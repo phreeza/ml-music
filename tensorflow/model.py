@@ -104,3 +104,30 @@ class Model():
             lambda: grads)
         optimizer = tf.train.AdamOptimizer(self.lr)
         self.train_op = optimizer.apply_gradients(zip(grads, tvars))
+
+    def sample(self, sess, args, num=1200):
+        def sample_gaussian(mu, sigma):
+            return mu + (sigma*np.random.randn(sigma.shape))
+
+        prev_x = np.randn((1, 1, args.chunk_samples), dtype=np.float32)
+        prev_state = sess.run(self.cell.zero_state(1, tf.float32))
+
+        chunks = np.zeros((num, args.chunk_samples), dtype=np.float32)
+
+        for i in xrange(num):
+
+            feed = {self.input_data: prev_x, self.initial_state:prev_state}
+
+            [o_pi, o_mu, o_sigma, next_state] = sess.run([self.pi, self.mu, self.sigma, self.final_state],feed)
+
+            idx = get_pi_idx(random.random(), o_pi[0])
+
+            next_x = sample_gaussian(o_mu, o_sigma)
+            chunks[i] = next_x
+
+            prev_x = np.zeros((1, 1, args.chunk_samples), dtype=np.float32)
+            prev_x[0][0] = next_x
+            prev_state = next_state
+
+        return chunks
+

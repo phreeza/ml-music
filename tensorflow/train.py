@@ -11,7 +11,7 @@ import util
 
 def main():
   parser = argparse.ArgumentParser()
-  parser.add_argument('--rnn_size', type=int, default=256,
+  parser.add_argument('--rnn_size', type=int, default=800,
                      help='size of RNN hidden state')
   parser.add_argument('--num_layers', type=int, default=2,
                      help='number of layers in the RNN')
@@ -21,7 +21,7 @@ def main():
                      help='minibatch size')
   parser.add_argument('--seq_length', type=int, default=300,
                      help='RNN sequence length')
-  parser.add_argument('--num_epochs', type=int, default=100,
+  parser.add_argument('--num_epochs', type=int, default=1000,
                      help='number of epochs')
   parser.add_argument('--save_every', type=int, default=500,
                      help='save frequency')
@@ -35,7 +35,7 @@ def main():
                      help='number of gaussian mixtures')
   parser.add_argument('--chunk_samples', type=int, default=1050,
                      help='number of samples per mdct chunk')
-  parser.add_argument('--keep_prob', type=float, default=0.8,
+  parser.add_argument('--keep_prob', type=float, default=0.5,
                      help='dropout keep probability')
   args = parser.parse_args()
   train(args)
@@ -64,7 +64,6 @@ def train(args):
 
     fname = '../Kimiko_Ishizaka_-_01_-_Aria.mp3'
     data = util.load_data(fname,args.chunk_samples-26)
-    util.write_data(data)
     print data.shape
     with open(os.path.join('save', 'config.pkl'), 'w') as f:
         cPickle.dump(args, f)
@@ -88,6 +87,7 @@ def train(args):
                 x,y = next_batch(data,args)
                 feed = {model.input_data: x, model.target_data: y, model.initial_state: state}
                 train_loss, state, _, cr, summary = sess.run([model.cost, model.final_state, model.train_op, check, merged], feed)
+                #train_loss, state, _ = sess.run([model.cost, model.final_state, model.train_op], feed)
                 summary_writer.add_summary(summary, e * 10 + b)
                 end = time.time()
                 print "{}/{} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}" \
@@ -99,8 +99,8 @@ def train(args):
                     saver.save(sess, checkpoint_path, global_step = e * 10 + b)
                     print "model saved to {}".format(checkpoint_path)
 
-            sample_data = model.sample(sess,args)
-            util.write_data(sample_data, fname = "out_"+str(e)+".wav")
+            #sample_data = model.sample(sess,args)
+            #util.write_data(sample_data, fname = "out_"+str(e)+".wav")
 
             x,y = next_val_batch(data,args)
             feed = {model.input_data: x, model.target_data: y, model.initial_state: state}

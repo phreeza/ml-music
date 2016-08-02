@@ -4,15 +4,17 @@ import numpy as np
 import random
 
 class Model():
-    def __init__(self, args, infer=False):
+    def __init__(self, args, sample=False):
 
         def tf_normal(x, mu, s):
             # eq # 24 and 25 of http://arxiv.org/abs/1308.0850
             norm = tf.sub(x, mu)
             #tf.histogram_summary('z-score', tf.div(norm,tf.sqrt(s)))
             #tf.histogram_summary('std-dev', tf.sqrt(s))
-            z = tf.reduce_sum(tf.div(tf.square(norm), s),1)
-            denom_log = tf.reduce_sum(tf.log(tf.sqrt(2*np.pi*s)), 1,name="denom_log")
+            w = np.ones((1,1050))
+            w[:,:26] = 1000.
+            z = tf.reduce_sum(w*tf.div(tf.square(norm), s),1)
+            denom_log = tf.reduce_sum(w*tf.log(tf.sqrt(2*np.pi*s)), 1,name="denom_log")
             result = -z/2-denom_log
             return result
 
@@ -37,7 +39,7 @@ class Model():
             return [z_pi, z_mu, z_sigma]
 
         self.args = args
-        if infer:
+        if sample:
             args.batch_size = 1
             args.seq_length = 1
 
@@ -54,7 +56,7 @@ class Model():
 
         cell = tf.nn.rnn_cell.MultiRNNCell([cell] * args.num_layers)
 
-        if (infer == False and args.keep_prob < 1): # training mode
+        if (sample == False and args.keep_prob < 1): # training mode
             cell = tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob = args.keep_prob)
 
         self.cell = cell
@@ -105,24 +107,34 @@ class Model():
         optimizer = tf.train.AdamOptimizer(self.lr)
         self.train_op = optimizer.apply_gradients(zip(grads, tvars))
 
-    def sample(self, sess, args, num=1200):
-        def sample_gaussian(mu, sigma):
-            return mu + (sigma*np.random.randn(sigma.shape))
+    def sample(self, sess, args, num=1200, start=None):
 
-        prev_x = np.randn((1, 1, args.chunk_samples), dtype=np.float32)
+        f = np.linspace(0,44100/2.,1024)
+        bark = 13*np.arctan(0.00076*f)+3.5*np.arctan((f/3500.)**2)
+        bark_ind = bark.astype(int)
+
+        def sample_gaussian(mu, sigma):
+            return mu + (sigma*np.random.randn(*sigma.shape))
+
+        if start is None:
+            prev_x = np.random.randn(1, 1, args.chunk_samples)
+        else:
+            prev_x = start[np.newaxis,np.newaxis,:]
         prev_state = sess.run(self.cell.zero_state(1, tf.float32))
 
         chunks = np.zeros((num, args.chunk_samples), dtype=np.float32)
 
         for i in xrange(num):
-
             feed = {self.input_data: prev_x, self.initial_state:prev_state}
-
             [o_pi, o_mu, o_sigma, next_state] = sess.run([self.pi, self.mu, self.sigma, self.final_state],feed)
 
-            idx = get_pi_idx(random.random(), o_pi[0])
-
             next_x = sample_gaussian(o_mu, o_sigma)
+            energies = np.zeros(26)
+            for n in range(26):
+                energies[n] = np.sqrt(((next_x[:,26:][:,bark_ind==n]**2).sum(axis=1)))
+
+            next_x[:,26:] = next_x[:,26:]/energies[bark_ind]
+
             chunks[i] = next_x
 
             prev_x = np.zeros((1, 1, args.chunk_samples), dtype=np.float32)
@@ -130,4 +142,3 @@ class Model():
             prev_state = next_state
 
         return chunks
-

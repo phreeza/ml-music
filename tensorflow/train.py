@@ -11,7 +11,7 @@ import util
 
 def main():
   parser = argparse.ArgumentParser()
-  parser.add_argument('--rnn_size', type=int, default=800,
+  parser.add_argument('--rnn_size', type=int, default=16,
                      help='size of RNN hidden state')
   parser.add_argument('--num_layers', type=int, default=2,
                      help='number of layers in the RNN')

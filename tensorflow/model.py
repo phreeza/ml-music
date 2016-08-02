@@ -7,31 +7,30 @@ class Model():
     def __init__(self, args, sample=False):
 
         def tf_normal(x, mu, s):
-            # eq # 24 and 25 of http://arxiv.org/abs/1308.0850
-            norm = tf.sub(x, mu)
+            norm = tf.sub(tf.expand_dims(x,2), mu)
             #tf.histogram_summary('z-score', tf.div(norm,tf.sqrt(s)))
             #tf.histogram_summary('std-dev', tf.sqrt(s))
-            w = np.ones((1,1050))
-            w[:,:26] = 1000.
-            z = tf.reduce_sum(w*tf.div(tf.square(norm), s),1)
-            denom_log = tf.reduce_sum(w*tf.log(tf.sqrt(2*np.pi*s)), 1,name="denom_log")
+            z = tf.reduce_sum(tf.div(tf.square(norm), s),1)
+            denom_log = tf.reduce_sum(tf.log(tf.sqrt(2*np.pi*s)), 1,name="denom_log")
             result = -z/2-denom_log
             return result
 
         def get_lossfunc(z_pi, z_mu,  z_sigma, x):
-            result = -tf_normal(x, z_mu, z_sigma)
-            #result = tf.mul(result, z_pi)
-            #result = tf.reduce_sum(result, 1, keep_dims=True)
-            #result = -tf.log(tf.maximum(result, 1e-30))
+            normals = tf_normal(x, z_mu, z_sigma)
+            result = tf_logsumexp(tf.log(z_pi)+normals)
 
             return tf.reduce_sum(result)
+        
+        def tf_logsumexp(x):
+            max_val = tf.max(x, keep_dims=True) 
+            ret = tf.log(tf.reduce_sum(tf.exp(x - max_val), axis=1, keep_dims=True)) + max_val
 
         def get_mixture_coef(output):
             z = output
             z_pi = z[:,:self.num_mixture]
-            z_mu = z[:,self.num_mixture:(args.chunk_samples+1)*self.num_mixture]
-            z_sigma = z[:,(args.chunk_samples+1)*self.num_mixture:]
-
+            z_mu = tf.reshape(z[:,self.num_mixture:(args.chunk_samples+1)*self.num_mixture],[-1,args.chunk_samples,self.num_mixture])
+            z_sigma = tf.reshape(z[:,(args.chunk_samples+1)*self.num_mixture:],[-1,args.chunk_samples,self.num_mixture])
+            
             # apply transformations
             z_pi = tf.nn.softmax(z_pi, name='z_pi')
             z_sigma = tf.exp(z_sigma, name='z_sigma')

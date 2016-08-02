@@ -17,13 +17,14 @@ class Model():
 
         def get_lossfunc(z_pi, z_mu,  z_sigma, x):
             normals = tf_normal(x, z_mu, z_sigma)
-            result = tf_logsumexp(tf.log(z_pi)+normals)
+            result = -tf_logsumexp(tf.log(z_pi)+normals)
 
             return tf.reduce_sum(result)
         
         def tf_logsumexp(x):
-            max_val = tf.max(x, keep_dims=True) 
-            ret = tf.log(tf.reduce_sum(tf.exp(x - max_val), axis=1, keep_dims=True)) + max_val
+            max_val = tf.reduce_max(x,1, keep_dims=True) 
+            ret = tf.log(tf.reduce_sum(tf.exp(x - max_val), 1, keep_dims=True)) + max_val
+            return ret
 
         def get_mixture_coef(output):
             z = output

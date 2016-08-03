@@ -19,7 +19,7 @@ class Model():
             normals = tf_normal(x, z_mu, z_sigma)
             result = -tf_logsumexp(tf.log(z_pi)+normals)
 
-            return tf.reduce_sum(result)
+            return tf.reduce_mean(result)
         
         def tf_logsumexp(x):
             max_val = tf.reduce_max(x,1, keep_dims=True) 
@@ -123,12 +123,14 @@ class Model():
         prev_state = sess.run(self.cell.zero_state(1, tf.float32))
 
         chunks = np.zeros((num, args.chunk_samples), dtype=np.float32)
-
+        mus = np.zeros((num, args.chunk_samples), dtype=np.float32)
+        sigmas = np.zeros((num, args.chunk_samples), dtype=np.float32)
+        
         for i in xrange(num):
             feed = {self.input_data: prev_x, self.initial_state:prev_state}
             [o_pi, o_mu, o_sigma, next_state] = sess.run([self.pi, self.mu, self.sigma, self.final_state],feed)
-
-            next_x = sample_gaussian(o_mu, o_sigma)
+            idx = np.random.choice(range(self.num_mixture),p = o_pi[0])
+            next_x = sample_gaussian(o_mu[:,:,idx], o_sigma[:,:,idx])
             energies = np.zeros(26)
             for n in range(26):
                 energies[n] = np.sqrt(((next_x[:,26:][:,bark_ind==n]**2).sum(axis=1)))
@@ -136,9 +138,11 @@ class Model():
             next_x[:,26:] = next_x[:,26:]/energies[bark_ind]
 
             chunks[i] = next_x
+            mus[i] = o_mu[:,:,idx]
+            sigmas[i] = o_sigma[:,:,idx]
 
             prev_x = np.zeros((1, 1, args.chunk_samples), dtype=np.float32)
             prev_x[0][0] = next_x
             prev_state = next_state
 
-        return chunks
+        return chunks, mus, sigmas

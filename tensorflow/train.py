@@ -11,7 +11,7 @@ import util
 
 def main():
   parser = argparse.ArgumentParser()
-  parser.add_argument('--rnn_size', type=int, default=16,
+  parser.add_argument('--rnn_size', type=int, default=800,
                      help='size of RNN hidden state')
   parser.add_argument('--num_layers', type=int, default=2,
                      help='number of layers in the RNN')
@@ -98,9 +98,6 @@ def train(args):
                     checkpoint_path = os.path.join('save', 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step = e * 10 + b)
                     print "model saved to {}".format(checkpoint_path)
-
-            #sample_data = model.sample(sess,args)
-            #util.write_data(sample_data, fname = "out_"+str(e)+".wav")
 
             x,y = next_val_batch(data,args)
             feed = {model.input_data: x, model.target_data: y, model.initial_state: state}

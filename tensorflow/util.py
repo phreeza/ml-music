@@ -118,7 +118,6 @@ def write_data(out,fname='out.wav'):
     bark_ind = bark.astype(int)
 
     energies_pred = np.exp(out[:,:26])
-    print energies_pred[:10,:10]
     energies = np.zeros((out.shape[0],26))
     spectrum = out[:,26:]
     for n in range(26):

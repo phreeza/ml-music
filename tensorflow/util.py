@@ -59,12 +59,10 @@ def MDCT(data, N, isInverse=False):
 def IMDCT(data, N):
     return MDCT(data, N, isInverse=True)
 
-
 def slow_mdct(x,N):
     return np.array([np.sum([x[n]*cos(np.pi/N*(n+0.5*(N+1))*(k+0.5)) for n in range(2*N)]) for k in range(N)])
 def slow_imdct(X,N):
     return (1./N)*np.array([np.sum([X[k]*cos(np.pi/N*(n+0.5*(N+1))*(k+0.5)) for k in range(N)]) for n in range(2*N)])
-
 
 def chunk(data,N):
     assert len(data)%N == 0
@@ -81,7 +79,6 @@ def dechunk(chunks):
     x[:N]+=chunks[0,:N]
     x[-N:]+=chunks[-1,-N:]
     return x
-
 
 def loadf(fname):
     f = pydub.AudioSegment.from_mp3(fname)

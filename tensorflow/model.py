@@ -10,16 +10,29 @@ class Model():
             norm = tf.sub(tf.expand_dims(x,2), mu)
             #tf.histogram_summary('z-score', tf.div(norm,tf.sqrt(s)))
             #tf.histogram_summary('std-dev', tf.sqrt(s))
-            z = tf.reduce_sum(tf.div(tf.square(norm), s),1)
-            denom_log = tf.reduce_sum(tf.log(tf.sqrt(2*np.pi*s)), 1,name="denom_log")
-            result = -z/2-denom_log
+            z = tf.div(tf.square(norm[:,:26,:]), s[:,:26,:])
+            denom_log = tf.log(tf.sqrt(2*np.pi*s[:,:26,:]))
+            result = tf.reduce_sum(-z/2-denom_log, 1)
+            
+            f = np.linspace(0,44100/2.,1024)
+            bark = 13*np.arctan(0.00076*f)+3.5*np.arctan((f/3500.)**2)
+            bark_ind = bark.astype(int)
+
+            for n in range(26):
+                mask = np.tile(bark_ind==n,(150000,1,20)
+                              )
+                mu_masked = tf.boolean_mask(mu[:,26:,:],mask)
+                x_masked = tf.boolean_mask(x[:,26:,:],mask)
+                e = tf.sqrt(tf.reduce_sum(tf.square(mu_masked)))
+                r = tf.div(mu_masked,e)
+                result += tf.reduce_sum(tf.prod(r,x_masked)+tf.log(e), 1)
+
             return result
 
         def get_lossfunc(z_pi, z_mu,  z_sigma, x):
             normals = tf_normal(x, z_mu, z_sigma)
             result = -tf_logsumexp(tf.log(z_pi)+normals)
-
-            return tf.reduce_mean(result)
+            return tf.reduce_sum(result)
         
         def tf_logsumexp(x):
             max_val = tf.reduce_max(x,1, keep_dims=True) 

@@ -7,14 +7,15 @@ class Model():
     def __init__(self, args, sample=False):
 
         def tf_normal(x, mu, s, rho):
-            norm = tf.sub(tf.expand_dims(x[:,:args.chunk_samples],2), mu)
+            x = tf.expand_dims(x,2)
+            norm = tf.sub(x[:,:args.chunk_samples,:], mu)
             #tf.histogram_summary('z-score', tf.div(norm,tf.sqrt(s)))
             #tf.histogram_summary('std-dev', tf.sqrt(s))
             z = tf.div(tf.square(norm), s)
             denom_log = tf.log(tf.sqrt(2*np.pi*s))
             result = tf.reduce_sum(-z/2-denom_log + 
-                                   (tf.log(rho)*(1+x[:,args.chunk_samples:])
-                                    +tf.log(1-rho)*(1-x[:,args.chunk_samples:]))/2, 1) 
+                                   (tf.log(rho)*(1+x[:,args.chunk_samples:,:])
+                                    +tf.log(1-rho)*(1-x[:,args.chunk_samples:,:]))/2, 1) 
 
             return result
 
@@ -67,8 +68,8 @@ class Model():
 
         self.cell = cell
 
-        self.input_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, args.chunk_samples], name='input_data')
-        self.target_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, args.chunk_samples],name = 'target_data')
+        self.input_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, 2*args.chunk_samples], name='input_data')
+        self.target_data = tf.placeholder(dtype=tf.float32, shape=[args.batch_size, args.seq_length, 2*args.chunk_samples],name = 'target_data')
         self.initial_state = cell.zero_state(batch_size=args.batch_size, dtype=tf.float32)
 
         self.num_mixture = args.num_mixture
@@ -90,7 +91,7 @@ class Model():
         self.final_state = last_state
 
         # reshape target data so that it is compatible with prediction shape
-        flat_target_data = tf.reshape(self.target_data,[-1, args.chunk_samples])
+        flat_target_data = tf.reshape(self.target_data,[-1, 2*args.chunk_samples])
 
         [o_pi, o_mu, o_sigma, o_rho] = get_mixture_coef(output)
 
@@ -120,28 +121,32 @@ class Model():
             return mu + (sigma*np.random.randn(*sigma.shape))
 
         if start is None:
-            prev_x = np.random.randn(1, 1, args.chunk_samples)
+            prev_x = np.random.randn(1, 1, 2*args.chunk_samples)
         else:
             prev_x = start[np.newaxis,np.newaxis,:]
         prev_state = sess.run(self.cell.zero_state(1, tf.float32))
 
-        chunks = np.zeros((num, args.chunk_samples), dtype=np.float32)
+        chunks = np.zeros((num, 2*args.chunk_samples), dtype=np.float32)
         mus = np.zeros((num, args.chunk_samples), dtype=np.float32)
         sigmas = np.zeros((num, args.chunk_samples), dtype=np.float32)
+        pis = np.zeros((num, args.num_mixture), dtype=np.float32)
         
         for i in xrange(num):
             feed = {self.input_data: prev_x, self.initial_state:prev_state}
             [o_pi, o_mu, o_sigma, o_rho, next_state] = sess.run([self.pi, self.mu, self.sigma, self.rho, self.final_state],feed)
-            idx = np.random.choice(range(self.num_mixture),p = o_pi[0])
-            next_x = sample_gaussian(o_mu[:,:,idx], o_sigma[:,:,idx])
-            next_x *= 2.*(o_rho > np.random.random(o_rho.shape))-1.
-
+            p = o_pi[0]
+            p = (p-p.min())
+            p = p/p.sum()
+            idx = np.random.choice(range(self.num_mixture),p = p)
+            next_x = np.hstack((sample_gaussian(o_mu[:,:,idx], o_sigma[:,:,idx]),
+                     2.*(o_rho[:,:,idx] > np.random.random(o_rho.shape[:2]))-1.))
             chunks[i] = next_x
             mus[i] = o_mu[:,:,idx]
             sigmas[i] = o_sigma[:,:,idx]
+            pis[i] = p
 
-            prev_x = np.zeros((1, 1, args.chunk_samples), dtype=np.float32)
+            prev_x = np.zeros((1, 1, 2*args.chunk_samples), dtype=np.float32)
             prev_x[0][0] = next_x
             prev_state = next_state
 
-        return chunks, mus, sigmas
+        return chunks, mus, sigmas, pis

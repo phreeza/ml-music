@@ -96,7 +96,7 @@ def load_data(fname,N=1024):
     window = np.sin(np.pi/(2*N)*(np.arange(2*N)+0.5))
     c = chunk(data,N)
     spectrum = np.array([MDCT(window*cc,2*N) for cc in c])
-    return np.hstack((np.log(np.max(np.abs(spectrum),1e-20)),np.sign(spectrum)))
+    return np.hstack((np.log(np.maximum(np.abs(spectrum),1e-20)),np.sign(spectrum)))
 
 def write_data(out,fname='out.wav'):
     from scipy.io import wavfile

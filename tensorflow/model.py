@@ -6,31 +6,20 @@ import random
 class Model():
     def __init__(self, args, sample=False):
 
-        def tf_normal(x, mu, s):
-            norm = tf.sub(tf.expand_dims(x,2), mu)
+        def tf_normal(x, mu, s, rho):
+            norm = tf.sub(tf.expand_dims(x[:,:args.chunk_samples],2), mu)
             #tf.histogram_summary('z-score', tf.div(norm,tf.sqrt(s)))
             #tf.histogram_summary('std-dev', tf.sqrt(s))
-            z = tf.div(tf.square(norm[:,:26,:]), s[:,:26,:])
-            denom_log = tf.log(tf.sqrt(2*np.pi*s[:,:26,:]))
-            result = tf.reduce_sum(-z/2-denom_log, 1)
-            
-            f = np.linspace(0,44100/2.,1024)
-            bark = 13*np.arctan(0.00076*f)+3.5*np.arctan((f/3500.)**2)
-            bark_ind = bark.astype(int)
-
-            for n in range(26):
-                mask = np.tile(bark_ind==n,(150000,1,20)
-                              )
-                mu_masked = tf.boolean_mask(mu[:,26:,:],mask)
-                x_masked = tf.boolean_mask(x[:,26:,:],mask)
-                e = tf.sqrt(tf.reduce_sum(tf.square(mu_masked)))
-                r = tf.div(mu_masked,e)
-                result += tf.reduce_sum(tf.prod(r,x_masked)+tf.log(e), 1)
+            z = tf.div(tf.square(norm), s)
+            denom_log = tf.log(tf.sqrt(2*np.pi*s))
+            result = tf.reduce_sum(-z/2-denom_log + 
+                                   (tf.log(rho)*(1+x[:,args.chunk_samples:])
+                                    +tf.log(1-rho)*(1-x[:,args.chunk_samples:]))/2, 1) 
 
             return result
 
-        def get_lossfunc(z_pi, z_mu,  z_sigma, x):
-            normals = tf_normal(x, z_mu, z_sigma)
+        def get_lossfunc(z_pi, z_mu,  z_sigma, z_rho, x):
+            normals = tf_normal(x, z_mu, z_sigma, z_rho)
             result = -tf_logsumexp(tf.log(z_pi)+normals)
             return tf.reduce_sum(result)
         
@@ -43,13 +32,17 @@ class Model():
             z = output
             z_pi = z[:,:self.num_mixture]
             z_mu = tf.reshape(z[:,self.num_mixture:(args.chunk_samples+1)*self.num_mixture],[-1,args.chunk_samples,self.num_mixture])
-            z_sigma = tf.reshape(z[:,(args.chunk_samples+1)*self.num_mixture:],[-1,args.chunk_samples,self.num_mixture])
+            z_sigma = tf.reshape(z[:,(args.chunk_samples+1)*self.num_mixture:(2*args.chunk_samples+1)*self.num_mixture],[-1,args.chunk_samples,self.num_mixture])
+            z_rho = tf.reshape(z[:,(2*args.chunk_samples+1)*self.num_mixture:],[-1,args.chunk_samples,self.num_mixture])
             
             # apply transformations
-            z_pi = tf.nn.softmax(z_pi, name='z_pi')
-            z_sigma = tf.exp(z_sigma, name='z_sigma')
 
-            return [z_pi, z_mu, z_sigma]
+            #softmax with lower bound
+            z_pi = (tf.nn.softmax(z_pi, name='z_pi')+0.01)/(1.+0.01*args.num_mixture)
+            z_sigma = tf.exp(z_sigma, name='z_sigma')
+            z_rho = tf.sigmoid(z_rho, name='z_rho')
+
+            return [z_pi, z_mu, z_sigma, z_rho]
 
         self.args = args
         if sample:
@@ -81,7 +74,7 @@ class Model():
         self.num_mixture = args.num_mixture
 
         # 
-        NOUT = self.num_mixture * (1 + 2*(args.chunk_samples))
+        NOUT = self.num_mixture * (1 + 3*(args.chunk_samples))
 
         with tf.variable_scope('rnnlm'):
             output_w = tf.get_variable("output_w", [args.rnn_size, NOUT])
@@ -99,13 +92,14 @@ class Model():
         # reshape target data so that it is compatible with prediction shape
         flat_target_data = tf.reshape(self.target_data,[-1, args.chunk_samples])
 
-        [o_pi, o_mu, o_sigma] = get_mixture_coef(output)
+        [o_pi, o_mu, o_sigma, o_rho] = get_mixture_coef(output)
 
         self.pi = o_pi
         self.mu = o_mu
         self.sigma = o_sigma
+        self.rho = o_rho
 
-        lossfunc = get_lossfunc(o_pi, o_mu, o_sigma, flat_target_data)
+        lossfunc = get_lossfunc(o_pi, o_mu, o_sigma, o_rho, flat_target_data)
         self.cost = lossfunc / (args.batch_size * args.seq_length)
         tf.scalar_summary('cost', self.cost)
 
@@ -122,10 +116,6 @@ class Model():
 
     def sample(self, sess, args, num=1200, start=None):
 
-        f = np.linspace(0,44100/2.,1024)
-        bark = 13*np.arctan(0.00076*f)+3.5*np.arctan((f/3500.)**2)
-        bark_ind = bark.astype(int)
-
         def sample_gaussian(mu, sigma):
             return mu + (sigma*np.random.randn(*sigma.shape))
 
@@ -141,14 +131,10 @@ class Model():
         
         for i in xrange(num):
             feed = {self.input_data: prev_x, self.initial_state:prev_state}
-            [o_pi, o_mu, o_sigma, next_state] = sess.run([self.pi, self.mu, self.sigma, self.final_state],feed)
+            [o_pi, o_mu, o_sigma, o_rho, next_state] = sess.run([self.pi, self.mu, self.sigma, self.rho, self.final_state],feed)
             idx = np.random.choice(range(self.num_mixture),p = o_pi[0])
             next_x = sample_gaussian(o_mu[:,:,idx], o_sigma[:,:,idx])
-            energies = np.zeros(26)
-            for n in range(26):
-                energies[n] = np.sqrt(((next_x[:,26:][:,bark_ind==n]**2).sum(axis=1)))
-
-            next_x[:,26:] = next_x[:,26:]/energies[bark_ind]
+            next_x *= 2.*(o_rho > np.random.random(o_rho.shape))-1.
 
             chunks[i] = next_x
             mus[i] = o_mu[:,:,idx]

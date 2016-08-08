@@ -33,7 +33,7 @@ def main():
                      help='decay rate for rmsprop')
   parser.add_argument('--num_mixture', type=int, default=20,
                      help='number of gaussian mixtures')
-  parser.add_argument('--chunk_samples', type=int, default=1050,
+  parser.add_argument('--chunk_samples', type=int, default=1024,
                      help='number of samples per mdct chunk')
   parser.add_argument('--keep_prob', type=float, default=0.5,
                      help='dropout keep probability')
@@ -63,7 +63,7 @@ def next_val_batch(data, args):
 def train(args):
 
     fname = '../Kimiko_Ishizaka_-_01_-_Aria.mp3'
-    data = util.load_data(fname,args.chunk_samples-26)
+    data = util.load_data(fname,args.chunk_samples)
     print data.shape
     with open(os.path.join('save', 'config2.pkl'), 'w') as f:
         cPickle.dump(args, f)

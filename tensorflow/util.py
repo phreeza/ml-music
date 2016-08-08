@@ -96,30 +96,13 @@ def load_data(fname,N=1024):
     window = np.sin(np.pi/(2*N)*(np.arange(2*N)+0.5))
     c = chunk(data,N)
     spectrum = np.array([MDCT(window*cc,2*N) for cc in c])
-     
-    f = np.linspace(0,44100/2.,N)
-    bark = 13*np.arctan(0.00076*f)+3.5*np.arctan((f/3500.)**2)
-    bark_ind = bark.astype(int)
-    energies = np.zeros((spectrum.shape[0],26))
-    for n in range(26):
-        energies[:,n] = np.sqrt(((spectrum[:,bark_ind==n]**2).sum(axis=1)))
-    spectrum_norm = spectrum/energies[:,bark_ind]
-    return np.hstack((np.log(energies),spectrum_norm))
+    return np.hstack((np.log(np.max(np.abs(spectrum),1e-20)),np.sign(spectrum)))
 
 def write_data(out,fname='out.wav'):
     from scipy.io import wavfile
-    N = out.shape[1]-26
+    N = out.shape[1]/2
     window = np.sin(np.pi/(2*N)*(np.arange(2*N)+0.5))
-    f = np.linspace(0,44100/2.,N)
-    bark = 13*np.arctan(0.00076*f)+3.5*np.arctan((f/3500.)**2)
-    bark_ind = bark.astype(int)
-
-    energies_pred = np.exp(out[:,:26])
-    energies = np.zeros((out.shape[0],26))
-    spectrum = out[:,26:]
-    for n in range(26):
-        energies[:,n] = np.sqrt(((spectrum[:,bark_ind==n]**2).sum(axis=1)))
-    spectrum = spectrum/energies[:,bark_ind]*energies_pred[:,bark_ind]
+    spectrum = np.exp(out[:,:N])*out[:,N:]
 
     inv_chunks = np.array([window*IMDCT(ss,2*N) for ss in spectrum])
     inverse = dechunk(inv_chunks)

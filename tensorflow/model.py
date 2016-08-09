@@ -7,15 +7,16 @@ class Model():
     def __init__(self, args, sample=False):
 
         def tf_normal(x, mu, s, rho):
-            x = tf.expand_dims(x,2)
-            norm = tf.sub(x[:,:args.chunk_samples,:], mu)
-            #tf.histogram_summary('z-score', tf.div(norm,tf.sqrt(s)))
-            #tf.histogram_summary('std-dev', tf.sqrt(s))
-            z = tf.div(tf.square(norm), s)
-            denom_log = tf.log(tf.sqrt(2*np.pi*s))
-            result = tf.reduce_sum(-z/2-denom_log + 
-                                   (tf.log(rho)*(1+x[:,args.chunk_samples:,:])
-                                    +tf.log(1-rho)*(1-x[:,args.chunk_samples:,:]))/2, 1) 
+            with tf.variable_scope('normal'):
+                x = tf.expand_dims(x,2)
+                norm = tf.sub(x[:,:args.chunk_samples,:], mu)
+                #tf.histogram_summary('z-score', tf.div(norm,tf.sqrt(s)))
+                #tf.histogram_summary('std-dev', tf.sqrt(s))
+                z = tf.div(tf.square(norm), s)
+                denom_log = tf.log(tf.maximum(1e-20,tf.sqrt(2*np.pi*s)),name='denom_log')
+                result = tf.reduce_sum(-z/2-denom_log + 
+                                       (tf.log(rho,name='log_rho')*(1+x[:,args.chunk_samples:,:])
+                                        +tf.log(1-rho,name='log_rho_inv')*(1-x[:,args.chunk_samples:,:]))/2, 1) 
 
             return result
 
@@ -25,25 +26,27 @@ class Model():
             return tf.reduce_sum(result)
         
         def tf_logsumexp(x):
-            max_val = tf.reduce_max(x,1, keep_dims=True) 
-            ret = tf.log(tf.reduce_sum(tf.exp(x - max_val), 1, keep_dims=True)) + max_val
-            return ret
+            with tf.variable_scope('logsumexp'):
+                max_val = tf.reduce_max(x,1, keep_dims=True) 
+                ret = tf.log(tf.reduce_sum(tf.exp(x - max_val), 1, keep_dims=True)) + max_val
+                return ret
 
         def get_mixture_coef(output):
-            z = output
-            z_pi = z[:,:self.num_mixture]
-            z_mu = tf.reshape(z[:,self.num_mixture:(args.chunk_samples+1)*self.num_mixture],[-1,args.chunk_samples,self.num_mixture])
-            z_sigma = tf.reshape(z[:,(args.chunk_samples+1)*self.num_mixture:(2*args.chunk_samples+1)*self.num_mixture],[-1,args.chunk_samples,self.num_mixture])
-            z_rho = tf.reshape(z[:,(2*args.chunk_samples+1)*self.num_mixture:],[-1,args.chunk_samples,self.num_mixture])
-            
-            # apply transformations
+            with tf.variable_scope('get_mixture'):
+                z = output
+                z_pi = z[:,:self.num_mixture]
+                z_mu = tf.reshape(z[:,self.num_mixture:(args.chunk_samples+1)*self.num_mixture],[-1,args.chunk_samples,self.num_mixture],name='z_mu')
+                z_sigma = tf.reshape(z[:,(args.chunk_samples+1)*self.num_mixture:(2*args.chunk_samples+1)*self.num_mixture],[-1,args.chunk_samples,self.num_mixture])
+                z_rho = tf.reshape(z[:,(2*args.chunk_samples+1)*self.num_mixture:],[-1,args.chunk_samples,self.num_mixture])
+                
+                # apply transformations
 
-            #softmax with lower bound
-            z_pi = (tf.nn.softmax(z_pi, name='z_pi')+0.01)/(1.+0.01*args.num_mixture)
-            z_sigma = tf.exp(z_sigma, name='z_sigma')
-            z_rho = tf.sigmoid(z_rho, name='z_rho')
+                #softmax with lower bound
+                z_pi = (tf.nn.softmax(z_pi, name='z_pi')+0.01)/(1.+0.01*args.num_mixture)
+                z_sigma = tf.exp(z_sigma, name='z_sigma')
+                z_rho = tf.sigmoid(z_rho, name='z_rho')
 
-            return [z_pi, z_mu, z_sigma, z_rho]
+                return [z_pi, z_mu, z_sigma, z_rho]
 
         self.args = args
         if sample:
@@ -83,13 +86,24 @@ class Model():
 
         #inputs = tf.split(1, args.seq_length, self.input_data)
         #inputs = [tf.squeeze(input_, [1]) for input_ in inputs]
-        inputs = tf.unpack(tf.transpose(self.input_data, perm=(1,0,2)))
+        #inputs = tf.unpack(tf.transpose(self.input_data, perm=(1,0,2)))
 
-        outputs, last_state = tf.nn.seq2seq.rnn_decoder(inputs, self.initial_state, cell, loop_function=None, scope='rnnlm')
-        output = tf.reshape(tf.concat(1, outputs), [-1, args.rnn_size])
+        # input shape: (batch_size, n_steps, n_input)
+        inputs = tf.transpose(self.input_data, [1, 0, 2])  # permute n_steps and batch_size
+        # Reshape to prepare input to hidden activation
+        inputs = tf.reshape(inputs, [-1, 2*args.chunk_samples]) # (n_steps*batch_size, n_input)
+        
+        # Split data because rnn cell needs a list of inputs for the RNN inner loop
+        inputs = tf.split(0, args.seq_length, inputs) # n_steps * (batch_size, n_hidden)
+        
+        # Get lstm cell output
+        outputs, last_state = tf.nn.rnn(cell, inputs, initial_state=self.initial_state)
+
+        #outputs, last_state = tf.nn.seq2seq.rnn_decoder(inputs, self.initial_state, cell, loop_function=None, scope='rnnlm_decode')
+        output = tf.transpose(tf.pack(outputs), [1,0,2])
+        output = tf.reshape(output, [-1, args.rnn_size])
         output = tf.nn.xw_plus_b(output, output_w, output_b)
         self.final_state = last_state
-
         # reshape target data so that it is compatible with prediction shape
         flat_target_data = tf.reshape(self.target_data,[-1, 2*args.chunk_samples])
 

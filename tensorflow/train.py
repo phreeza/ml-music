@@ -3,6 +3,7 @@ import tensorflow as tf
 
 import argparse
 import time
+from datetime import datetime
 import os
 import cPickle
 
@@ -17,7 +18,7 @@ def main():
                      help='number of layers in the RNN')
   parser.add_argument('--model', type=str, default='lstm',
                      help='rnn, gru, or lstm')
-  parser.add_argument('--batch_size', type=int, default=5,
+  parser.add_argument('--batch_size', type=int, default=25,
                      help='minibatch size')
   parser.add_argument('--seq_length', type=int, default=300,
                      help='RNN sequence length')
@@ -63,26 +64,27 @@ def next_val_batch(data, args):
 def train(args):
 
     fname = '../Kimiko_Ishizaka_-_01_-_Aria.mp3'
-    data = util.load_data(fname,args.chunk_samples)
+    trace = util.loadf(fname)
     with open(os.path.join('save', 'config.pkl'), 'w') as f:
         cPickle.dump(args, f)
 
     model = Model(args)
 
     with tf.Session() as sess:
-        summary_writer = tf.train.SummaryWriter('logs', sess.graph)
+        summary_writer = tf.train.SummaryWriter('logs/'+datetime.now().isoformat().replace(':','-'), sess.graph)
         check = tf.add_check_numerics_ops()
         merged = tf.merge_all_summaries()
         tf.initialize_all_variables().run()
         saver = tf.train.Saver(tf.all_variables())
+        start = time.time()
         for e in xrange(args.num_epochs):
             sess.run(tf.assign(model.lr, args.learning_rate * (args.decay_rate ** e)))
             state = model.initial_state.eval()
             for b in xrange(100):
-                start = time.time()
                 #t0 = np.random.randn(args.batch_size,1,(args.chunk_samples))
                 #x = np.sin(2*np.pi*(np.arange(args.seq_length)[np.newaxis,:,np.newaxis]/30.+t0)) + np.random.randn(args.batch_size,args.seq_length,(args.chunk_samples))*0.1
                 #y = np.sin(2*np.pi*(np.arange(1,args.seq_length+1)[np.newaxis,:,np.newaxis]/30.+t0)) + np.random.randn(args.batch_size,args.seq_length,(args.chunk_samples))*0.1
+                data = util.load_augment_data(trace,args.chunk_samples)
                 x,y = next_batch(data,args)
                 feed = {model.input_data: x, model.target_data: y, model.initial_state: state}
                 train_loss, state, _, cr, summary = sess.run([model.cost, model.final_state, model.train_op, check, merged], feed)
@@ -97,14 +99,17 @@ def train(args):
                     .format(e * 100 + b,
                             args.num_epochs * 100,
                             e, train_loss, end - start)
+                start = time.time()
 
             x,y = next_val_batch(data,args)
             feed = {model.input_data: x, model.target_data: y, model.initial_state: state}
             test_loss, state = sess.run([model.cost, model.final_state], feed)
+            end = time.time()
             print ">> {}/{} (epoch {}), test_loss = {:.3f}, time/batch = {:.3f}" \
                 .format(e * 100 + b,
                         args.num_epochs * 100,
                         e, test_loss, end - start)
+            start = time.time()
 
 if __name__ == '__main__':
   main()

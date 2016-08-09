@@ -89,6 +89,19 @@ def loadf(fname):
     data /= data.std(axis=0) * 3.
     return data
 
+def load_augment_data(trace,N=1024):
+    data = trace
+    offset = np.random.randint(N) 
+    data = data[offset:]
+    data = data[:-(len(data)%N)]
+    data += np.random.randn(*data.shape)*0.01*data.std()
+    data *= 0.9 + np.random.random()*0.2
+    data *= 2*np.random.randint(2)-1.
+    window = np.sin(np.pi/(2*N)*(np.arange(2*N)+0.5))
+    c = chunk(data,N)
+    spectrum = np.array([MDCT(window*cc,2*N) for cc in c])
+    return np.hstack((np.log(np.maximum(np.abs(spectrum),1e-20)),np.sign(spectrum)))
+
 def load_data(fname,N=1024):
     data = loadf(fname)
     

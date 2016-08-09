@@ -100,7 +100,11 @@ def load_augment_data(trace,N=1024):
     window = np.sin(np.pi/(2*N)*(np.arange(2*N)+0.5))
     c = chunk(data,N)
     spectrum = np.array([MDCT(window*cc,2*N) for cc in c])
-    return np.hstack((np.log(np.maximum(np.abs(spectrum),1e-20)),np.sign(spectrum)))
+    ret = np.hstack((np.log(np.maximum(np.abs(spectrum),1e-20)),np.sign(spectrum)))
+    means = ret[:,:N].mean(axis=0)
+    stds = ret[:,:N].std(axis=0)
+    ret[:,:N] = (ret[:,:N]-means)/stds
+    return ret, means, stds
 
 def load_data(fname,N=1024):
     data = loadf(fname)

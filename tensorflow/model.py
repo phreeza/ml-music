@@ -10,9 +10,10 @@ class Model():
             with tf.variable_scope('normal'):
                 x = tf.expand_dims(x,2)
                 norm = tf.sub(x[:,:args.chunk_samples,:], mu)
-                #tf.histogram_summary('z-score', tf.div(norm,tf.sqrt(s)))
-                #tf.histogram_summary('std-dev', tf.sqrt(s))
                 z = tf.div(tf.square(norm), s)
+                tf.histogram_summary('z-score', tf.div(norm,tf.sqrt(s)))
+                tf.histogram_summary('std-dev', tf.sqrt(s))
+                tf.scalar_summary('std-dev-mean', tf.reduce_mean(tf.sqrt(s)))
                 denom_log = tf.log(tf.maximum(1e-20,tf.sqrt(2*np.pi*s)),name='denom_log')
                 result = tf.reduce_sum(-z/2-denom_log + 
                                        (tf.log(rho,name='log_rho')*(1+x[:,args.chunk_samples:,:])
@@ -23,6 +24,7 @@ class Model():
         def get_lossfunc(z_pi, z_mu,  z_sigma, z_rho, x):
             normals = tf_normal(x, z_mu, z_sigma, z_rho)
             result = -tf_logsumexp(tf.log(z_pi)+normals)
+
             return tf.reduce_sum(result)
         
         def tf_logsumexp(x):
@@ -80,9 +82,8 @@ class Model():
         # 
         NOUT = self.num_mixture * (1 + 3*(args.chunk_samples))
 
-        with tf.variable_scope('rnnlm'):
-            output_w = tf.get_variable("output_w", [args.rnn_size, NOUT])
-            output_b = tf.get_variable("output_b", [NOUT])
+        output_w = tf.Variable(tf.random_normal([args.rnn_size, NOUT],stddev=0.2), name="output_w")
+        output_b = tf.Variable(tf.zeros([NOUT]), name="output_b")
 
         #inputs = tf.split(1, args.seq_length, self.input_data)
         #inputs = [tf.squeeze(input_, [1]) for input_ in inputs]
@@ -90,7 +91,6 @@ class Model():
 
         # input shape: (batch_size, n_steps, n_input)
         inputs = tf.transpose(self.input_data, [1, 0, 2])  # permute n_steps and batch_size
-        # Reshape to prepare input to hidden activation
         inputs = tf.reshape(inputs, [-1, 2*args.chunk_samples]) # (n_steps*batch_size, n_input)
         
         # Split data because rnn cell needs a list of inputs for the RNN inner loop
@@ -101,9 +101,11 @@ class Model():
 
         #outputs, last_state = tf.nn.seq2seq.rnn_decoder(inputs, self.initial_state, cell, loop_function=None, scope='rnnlm_decode')
         output = tf.transpose(tf.pack(outputs), [1,0,2])
+        print output
         output = tf.reshape(output, [-1, args.rnn_size])
         output = tf.nn.xw_plus_b(output, output_w, output_b)
         self.final_state = last_state
+        print self.target_data
         # reshape target data so that it is compatible with prediction shape
         flat_target_data = tf.reshape(self.target_data,[-1, 2*args.chunk_samples])
 

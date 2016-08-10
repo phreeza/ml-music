@@ -48,6 +48,7 @@ def next_batch(data, args):
     for i in xrange(args.batch_size):
         idx = np.random.randint(1000, data.shape[0]-args.seq_length-2)
         x_batch.append(np.copy(data[idx:idx+args.seq_length]))
+        #y_batch.append(np.copy(data[idx:idx+args.seq_length]))
         y_batch.append(np.copy(data[idx+1:idx+args.seq_length+1]))
     return np.array(x_batch), np.array(y_batch)
 

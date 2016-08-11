@@ -86,7 +86,7 @@ def train(args):
                 #x = np.sin(2*np.pi*(np.arange(args.seq_length)[np.newaxis,:,np.newaxis]/30.+t0)) + np.random.randn(args.batch_size,args.seq_length,(args.chunk_samples))*0.1
                 #y = np.sin(2*np.pi*(np.arange(1,args.seq_length+1)[np.newaxis,:,np.newaxis]/30.+t0)) + np.random.randn(args.batch_size,args.seq_length,(args.chunk_samples))*0.1
                 if b%5 == 0:
-                    data, _, _ = util.load_augment_data(np.random.choice(trace),args.chunk_samples)
+                    data, _, _ = util.load_augment_data(np.random.choice(traces),args.chunk_samples)
                 x,y = next_batch(data,args)
                 feed = {model.input_data: x, model.target_data: y, model.initial_state: state}
                 train_loss, state, _, cr, summary, sigma = sess.run([model.cost, model.final_state, model.train_op, check, merged, model.sigma], feed)

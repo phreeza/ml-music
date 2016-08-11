@@ -17,13 +17,13 @@ class Model():
                 denom_log = tf.log(tf.maximum(1e-20,tf.sqrt(2*np.pi*s)),name='denom_log')
                 result = tf.reduce_sum(-z/2-denom_log + 
                                        (tf.log(rho,name='log_rho')*(1+x[:,args.chunk_samples:,:])
-                                        +tf.log(1-rho,name='log_rho_inv')*(1-x[:,args.chunk_samples:,:]))/2, 1) 
+                                        +tf.log(tf.maximum(1e-20,1-rho),name='log_rho_inv')*(1-x[:,args.chunk_samples:,:]))/2, 1) 
 
             return result
 
         def get_lossfunc(z_pi, z_mu,  z_sigma, z_rho, x):
             normals = tf_normal(x, z_mu, z_sigma, z_rho)
-            result = -tf_logsumexp(tf.log(z_pi)+normals)
+            result = -tf_logsumexp(tf.log(tf.maximum(1e-20,z_pi))+normals)
 
             return tf.reduce_sum(result)
         
@@ -44,9 +44,10 @@ class Model():
                 # apply transformations
 
                 #softmax with lower bound
-                z_pi = (tf.nn.softmax(z_pi, name='z_pi')+0.01)/(1.+0.01*args.num_mixture)
+                #z_pi = (tf.nn.softmax(z_pi, name='z_pi')+0.01)/(1.+0.01*args.num_mixture)
+                z_pi = tf.nn.softmax(z_pi, name='z_pi')
                 z_sigma = tf.exp(z_sigma, name='z_sigma')
-                z_rho = tf.sigmoid(z_rho, name='z_rho')
+                z_rho = tf.maximum(1e-20,tf.sigmoid(z_rho, name='z_rho'))
 
                 return [z_pi, z_mu, z_sigma, z_rho]
 
@@ -101,11 +102,9 @@ class Model():
 
         #outputs, last_state = tf.nn.seq2seq.rnn_decoder(inputs, self.initial_state, cell, loop_function=None, scope='rnnlm_decode')
         output = tf.transpose(tf.pack(outputs), [1,0,2])
-        print output
         output = tf.reshape(output, [-1, args.rnn_size])
         output = tf.nn.xw_plus_b(output, output_w, output_b)
         self.final_state = last_state
-        print self.target_data
         # reshape target data so that it is compatible with prediction shape
         flat_target_data = tf.reshape(self.target_data,[-1, 2*args.chunk_samples])
 
@@ -151,8 +150,8 @@ class Model():
             feed = {self.input_data: prev_x, self.initial_state:prev_state}
             [o_pi, o_mu, o_sigma, o_rho, next_state] = sess.run([self.pi, self.mu, self.sigma, self.rho, self.final_state],feed)
             p = o_pi[0]
-            p = (p-p.min())
-            p = p/p.sum()
+            #p = (p-p.min())
+            #p = p/p.sum()
             idx = np.random.choice(range(self.num_mixture),p = p)
             next_x = np.hstack((sample_gaussian(o_mu[:,:,idx], o_sigma[:,:,idx]),
                      2.*(o_rho[:,:,idx] > np.random.random(o_rho.shape[:2]))-1.))

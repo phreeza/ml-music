@@ -118,6 +118,7 @@ def load_data(fname,N=1024):
 def write_data(out,fname='out.wav'):
     from scipy.io import wavfile
     N = out.shape[1]/2
+    print N
     window = np.sin(np.pi/(2*N)*(np.arange(2*N)+0.5))
     spectrum = np.exp(out[:,:N])*out[:,N:]
 

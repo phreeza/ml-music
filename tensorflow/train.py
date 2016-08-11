@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 
 import argparse
+import glob
 import time
 from datetime import datetime
 import os
@@ -63,9 +64,8 @@ def next_val_batch(data, args):
     return np.array(x_batch), np.array(y_batch)
 
 def train(args):
-
-    fname = '../Kimiko_Ishizaka_-_01_-_Aria.mp3'
-    trace = util.loadf(fname)
+    fnames = glob.glob('../mp3/*.mp3') 
+    traces = [util.loadf(fname) for fname in fnames]
     with open(os.path.join('save', 'config.pkl'), 'w') as f:
         cPickle.dump(args, f)
 
@@ -85,10 +85,11 @@ def train(args):
                 #t0 = np.random.randn(args.batch_size,1,(args.chunk_samples))
                 #x = np.sin(2*np.pi*(np.arange(args.seq_length)[np.newaxis,:,np.newaxis]/30.+t0)) + np.random.randn(args.batch_size,args.seq_length,(args.chunk_samples))*0.1
                 #y = np.sin(2*np.pi*(np.arange(1,args.seq_length+1)[np.newaxis,:,np.newaxis]/30.+t0)) + np.random.randn(args.batch_size,args.seq_length,(args.chunk_samples))*0.1
-                data, _, _ = util.load_augment_data(trace,args.chunk_samples)
+                if b%5 == 0:
+                    data, _, _ = util.load_augment_data(np.random.choice(trace),args.chunk_samples)
                 x,y = next_batch(data,args)
                 feed = {model.input_data: x, model.target_data: y, model.initial_state: state}
-                train_loss, state, _, cr, summary = sess.run([model.cost, model.final_state, model.train_op, check, merged], feed)
+                train_loss, state, _, cr, summary, sigma = sess.run([model.cost, model.final_state, model.train_op, check, merged, model.sigma], feed)
                 #train_loss, state, _ = sess.run([model.cost, model.final_state, model.train_op], feed)
                 summary_writer.add_summary(summary, e * 100 + b)
                 if (e * 100 + b) % args.save_every == 0 and ((e * 100 + b) > 0):
@@ -96,10 +97,10 @@ def train(args):
                     saver.save(sess, checkpoint_path, global_step = e * 100 + b)
                     print "model saved to {}".format(checkpoint_path)
                 end = time.time()
-                print "{}/{} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}" \
+                print "{}/{} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}, std = {}" \
                     .format(e * 100 + b,
                             args.num_epochs * 100,
-                            e, train_loss, end - start)
+                            e, train_loss, end - start, sigma.mean(axis=0).mean(axis=0))
                 start = time.time()
 
             x,y = next_val_batch(data,args)

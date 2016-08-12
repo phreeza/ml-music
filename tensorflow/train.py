@@ -100,7 +100,7 @@ def train(args):
                 print "{}/{} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}, std = {}" \
                     .format(e * 100 + b,
                             args.num_epochs * 100,
-                            e, train_loss, end - start, sigma.mean(axis=0).mean(axis=0))
+                            e, train_loss, end - start, np.sqrt(sigma).mean(axis=0).mean(axis=0))
                 start = time.time()
 
             x,y = next_val_batch(data,args)

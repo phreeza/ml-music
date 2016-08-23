@@ -19,9 +19,9 @@ ckpt = tf.train.get_checkpoint_state('save')
 print "loading model: ",ckpt.model_checkpoint_path
 
 saver.restore(sess, ckpt.model_checkpoint_path)
-
-sample_data,mus,sigmas,pis = model.sample(sess,saved_args,start=data[500,:])
-sample_data[:,:1024] = sample_data[:,:1024]*stds + means
-data[:,:1024] = data[:,:1024]*stds + means
+n = np.random.randint(data.shape[0]-100)
+sample_data,mus,sigmas,pis = model.sample(sess,saved_args,start=data[n:n+100,:])
+sample_data[:,:saved_args.chunk_samples] = sample_data[:,:saved_args.chunk_samples]*stds + means
+data[:,:saved_args.chunk_samples] = data[:,:saved_args.chunk_samples]*stds + means
 sample_trace = util.write_data(np.minimum(sample_data,1.1), fname = "out.wav")
 util.write_data(data[500:1700,:], fname = "out_ref.wav")

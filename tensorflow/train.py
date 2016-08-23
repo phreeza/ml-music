@@ -64,7 +64,7 @@ def next_val_batch(data, args):
     return np.array(x_batch), np.array(y_batch)
 
 def train(args):
-    fnames = glob.glob('../mp3/*.mp3') 
+    fnames = glob.glob('../mp3/*01*.mp3')[:1]
     traces = [util.loadf(fname) for fname in fnames]
     with open(os.path.join('save', 'config.pkl'), 'w') as f:
         cPickle.dump(args, f)
@@ -85,8 +85,8 @@ def train(args):
                 #t0 = np.random.randn(args.batch_size,1,(args.chunk_samples))
                 #x = np.sin(2*np.pi*(np.arange(args.seq_length)[np.newaxis,:,np.newaxis]/30.+t0)) + np.random.randn(args.batch_size,args.seq_length,(args.chunk_samples))*0.1
                 #y = np.sin(2*np.pi*(np.arange(1,args.seq_length+1)[np.newaxis,:,np.newaxis]/30.+t0)) + np.random.randn(args.batch_size,args.seq_length,(args.chunk_samples))*0.1
-                if b%5 == 0:
-                    data, _, _ = util.load_augment_data(np.random.choice(traces),args.chunk_samples)
+                if b%25 == 0:
+                    data, _, _ = util.load_augment_data(traces[0],args.chunk_samples)
                 x,y = next_batch(data,args)
                 feed = {model.input_data: x, model.target_data: y, model.initial_state: state}
                 train_loss, state, _, cr, summary, sigma = sess.run([model.cost, model.final_state, model.train_op, check, merged, model.sigma], feed)

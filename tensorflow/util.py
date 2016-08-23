@@ -93,7 +93,8 @@ def load_augment_data(trace,N=1024):
     data = trace
     offset = np.random.randint(N) 
     data = data[offset:]
-    data = data[:-(len(data)%N)]
+    if (len(data)%N) > 0:
+        data = data[:-(len(data)%N)]
     data += np.random.randn(*data.shape)*0.01*data.std()
     data *= 0.9 + np.random.random()*0.2
     data *= 2*np.random.randint(2)-1.

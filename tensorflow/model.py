@@ -15,7 +15,7 @@ class Model():
                 tf.histogram_summary('std-dev', tf.sqrt(s))
                 tf.scalar_summary('std-dev-mean', tf.reduce_mean(tf.sqrt(s)))
                 denom_log = tf.log(tf.maximum(1e-20,tf.sqrt(2*np.pi*s)),name='denom_log')
-                result = tf.reduce_sum(-z/2-denom_log + 
+                result = tf.reduce_sum(-z/2-10*denom_log + 
                                        (tf.log(rho,name='log_rho')*(1+x[:,args.chunk_samples:,:])
                                         +tf.log(tf.maximum(1e-20,1-rho),name='log_rho_inv')*(1-x[:,args.chunk_samples:,:]))/2, 1) 
 
@@ -116,7 +116,7 @@ class Model():
         self.rho = o_rho
 
         lossfunc = get_lossfunc(o_pi, o_mu, o_sigma, o_rho, flat_target_data)
-        self.cost = lossfunc / (args.batch_size * args.seq_length)
+        self.cost = lossfunc / (args.batch_size * args.seq_length * args.chunk_samples)
         tf.scalar_summary('cost', self.cost)
 
 
@@ -130,14 +130,14 @@ class Model():
         optimizer = tf.train.AdamOptimizer(self.lr)
         self.train_op = optimizer.apply_gradients(zip(grads, tvars))
 
-    def sample(self, sess, args, num=1200, start=None):
+    def sample(self, sess, args, num=4410, start=None):
 
         def sample_gaussian(mu, sigma):
-            return mu + (sigma*np.random.randn(*sigma.shape))
+            return mu + (np.sqrt(sigma)*np.random.randn(*sigma.shape))
 
         if start is None:
             prev_x = np.random.randn(1, 1, 2*args.chunk_samples)
-        else:
+        elif len(start.shape) == 1:
             prev_x = start[np.newaxis,np.newaxis,:]
         prev_state = sess.run(self.cell.zero_state(1, tf.float32))
 
@@ -145,13 +145,29 @@ class Model():
         mus = np.zeros((num, args.chunk_samples), dtype=np.float32)
         sigmas = np.zeros((num, args.chunk_samples), dtype=np.float32)
         pis = np.zeros((num, args.num_mixture), dtype=np.float32)
-        
+       
+        if len(start.shape) == 2:
+            for i in range(start.shape[0]-1):
+                prev_x = start[i,:]
+                prev_x = prev_x[np.newaxis,np.newaxis,:]
+                feed = {self.input_data: prev_x, self.initial_state:prev_state}
+                [o_pi, o_mu, o_sigma, o_rho, prev_state] = sess.run([self.pi, self.mu, self.sigma, self.rho, self.final_state],feed)
+            prev_x = start[-1,:]
+            prev_x = prev_x[np.newaxis,np.newaxis,:]
+
         for i in xrange(num):
             feed = {self.input_data: prev_x, self.initial_state:prev_state}
             [o_pi, o_mu, o_sigma, o_rho, next_state] = sess.run([self.pi, self.mu, self.sigma, self.rho, self.final_state],feed)
             p = o_pi[0]
-            #p = (p-p.min())
-            #p = p/p.sum()
+            #idx = np.argmax(p)
+            if i%100 ==0:
+                print np.argsort(p)
+            if p.max() > 0.001:
+                p[p<0.001] = 0.0
+                p = p/p.sum()
+            else:
+                print p.max()
+            p = (p-p.min())
             idx = np.random.choice(range(self.num_mixture),p = p)
             next_x = np.hstack((sample_gaussian(o_mu[:,:,idx], o_sigma[:,:,idx]),
                      2.*(o_rho[:,:,idx] > np.random.random(o_rho.shape[:2]))-1.))

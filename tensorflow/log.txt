@@ -1,0 +1,3 @@
+6ce89c --save_every 50 --num_layers 1 --rnn_size 64 --num_mixture 32 --chunk_samples 2048 --seq_length 300 
+
+This produces some macro structure, and can follow a single note at the onset, but after that it seems to descend into a kind of average note. Sounds vaguely like someone mashing all keys at the same time

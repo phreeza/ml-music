@@ -15,7 +15,7 @@ class Model():
                 tf.histogram_summary('std-dev', tf.sqrt(s))
                 tf.scalar_summary('std-dev-mean', tf.reduce_mean(tf.sqrt(s)))
                 denom_log = tf.log(tf.maximum(1e-20,tf.sqrt(2*np.pi*s)),name='denom_log')
-                result = tf.reduce_sum(-z/2-10*denom_log + 
+                result = tf.reduce_sum(-z/2-denom_log + 
                                        (tf.log(rho,name='log_rho')*(1+x[:,args.chunk_samples:,:])
                                         +tf.log(tf.maximum(1e-20,1-rho),name='log_rho_inv')*(1-x[:,args.chunk_samples:,:]))/2, 1) 
 

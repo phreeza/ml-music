@@ -53,6 +53,7 @@ class VAE():
     # corresponding optimizer
     self._create_loss_optimizer()
 
+    self.check = tf.add_check_numerics_ops()
     # Initializing the tensor flow variables
     init = tf.initialize_all_variables()
 
@@ -73,7 +74,7 @@ class VAE():
     n_z = self.z_dim
     eps = tf.random_normal((self.batch_size, n_z), 0.0, 1.0, dtype=tf.float32)
     # z = mu + sigma*epsilon
-    self.z = tf.add(self.z_mean, tf.mul(tf.sqrt(tf.exp(self.z_log_sigma_sq)), eps))
+    self.z = tf.add(self.z_mean, tf.mul(tf.sqrt(tf.exp(tf.minimum(20.,self.z_log_sigma_sq))), eps))
 
     # Use generator to determine mean of
     # Bernoulli distribution of reconstructed input
@@ -114,13 +115,13 @@ class VAE():
     #     for reconstructing the input when the activation in latent
     #     is given.
 
-    orig_image = tf.reshape(self.x, [self.batch_size, -1])
-    new_image = tf.reshape(self.x_reconstr_mean, [self.batch_size, -1])
+    orig_energies = tf.reshape(self.x, [self.batch_size, -1])
+    new_energies = tf.reshape(self.x_reconstr_mean, [self.batch_size, -1])
 
-    norm = tf.square(tf.sub(orig_image, new_image))
-    z = tf.div(tf.square(norm),tf.exp(self.x_reconstr_log_sigma_sq))
-    denom_log = tf.log(tf.sqrt(2*np.pi)) + self.x_reconstr_log_sigma_sq/2.
-    self.vae_loss_likelihood = tf.reduce_sum(z/2+denom_log, 1) 
+    diff = tf.square(tf.sub(orig_energies, new_energies))
+    diff_norm = tf.div(tf.square(diff),tf.exp(tf.minimum(20.,self.x_reconstr_log_sigma_sq)))
+    denom_log = tf.log(2*np.pi) + self.x_reconstr_log_sigma_sq
+    self.vae_loss_likelihood = tf.reduce_sum(0.5*(diff_norm+denom_log), 1) 
     # use L2 loss instead:
     #if (self.loss_mode == 1):
     #  d = (orig_image - new_image)
@@ -142,7 +143,7 @@ class VAE():
     #     the prior.
     self.vae_loss_kl = -0.5 * tf.reduce_sum(1 + self.z_log_sigma_sq
                                        - tf.square(self.z_mean)
-                                       - tf.exp(self.z_log_sigma_sq), 1)
+                                       - tf.exp(tf.minimum(20.,self.z_log_sigma_sq)), 1)
 
     self.vae_loss_kl = tf.reduce_mean(self.vae_loss_kl) / self.n_points
 
@@ -161,7 +162,7 @@ class VAE():
     Return cost of mini-batch.
     """
 
-    opt, cost, vae_loss_likelihood, vae_loss_kl = self.sess.run((self.optimizer, self.cost, self.vae_loss_likelihood, self.vae_loss_kl),
+    opt, cost, vae_loss_likelihood, vae_loss_kl, _ = self.sess.run((self.optimizer, self.cost, self.vae_loss_likelihood, self.vae_loss_kl, self.check),
                               feed_dict={self.x_raw: X})
     return cost, vae_loss_likelihood, vae_loss_kl
 

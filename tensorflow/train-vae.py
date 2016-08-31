@@ -108,8 +108,10 @@ def train(args):
             dat, _, _ = util.load_augment_data(trace,args.chunk_samples)
             data.append(dat)
         data = np.vstack(data)
+    #data = np.zeros(500*20)
     for i in range(data.shape[0]/batch_size):
       batch_xs = data[np.random.randint(data.shape[0],size=batch_size),:args.chunk_samples]
+     # batch_xs = np.sin(np.arange(args.chunk_samples)[:,np.newaxis]*np.random.random((1,batch_size))+2*np.pi*np.random.random((1,batch_size))).T
       # Fit training using batch data
       cost, likelihood_loss, kl_loss = vae.partial_fit(batch_xs)
 

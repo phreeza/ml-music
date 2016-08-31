@@ -14,6 +14,6 @@ from modelVAE import VAE
 
 from matplotlib import pyplot as plt
 
-vae = VAE(z_dim=2,net_size=64)
-ckpt = tf.train.get_checkpoint_state('save-vae')
-vae.load_model('save-vae')
+vae = VAE(z_dim=64,net_size=128,chunk_samples=128)
+ckpt = tf.train.get_checkpoint_state('save-vae-aws')
+vae.load_model('save-vae-aws')

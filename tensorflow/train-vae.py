@@ -102,18 +102,21 @@ def train(args):
     avg_likelihood_loss = 0.
     avg_kl_loss = 0.
     # Loop over all batches
-    if epoch%3 == 0:
+    if epoch%4 == 0:
         data = []
         for trace in traces:
             dat, _, _ = util.load_augment_data(trace,args.chunk_samples)
             data.append(dat)
         data = np.vstack(data)
+        print "Refreshed data"
     #data = np.zeros(500*20)
     for i in range(data.shape[0]/batch_size):
       batch_xs = data[np.random.randint(data.shape[0],size=batch_size),:args.chunk_samples]
      # batch_xs = np.sin(np.arange(args.chunk_samples)[:,np.newaxis]*np.random.random((1,batch_size))+2*np.pi*np.random.random((1,batch_size))).T
       # Fit training using batch data
-      cost, likelihood_loss, kl_loss = vae.partial_fit(batch_xs)
+      cost, likelihood_loss, kl_loss, gradnorm = vae.partial_fit(batch_xs)
+      if gradnorm > 1.:
+          print gradnorm
 
       # Compute average loss
       avg_cost += cost /(data.shape[0]/batch_size) 

@@ -153,8 +153,16 @@ class VAE():
 
     self.t_vars = tf.trainable_variables()
 
-    # Use ADAM optimizer
-    self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.cost, var_list=self.t_vars)
+    # Use RMSProp optimizer
+    opt = tf.train.RMSPropOptimizer(self.learning_rate) #.minimize(self.cost, var_list=self.t_vars)
+    grads, t_vars = zip(*opt.compute_gradients(self.cost, self.t_vars))
+    self.gradnorm = tf.global_norm(grads)
+    grads = tf.cond(
+        tf.global_norm(grads) > 1e-20,
+        lambda: tf.clip_by_global_norm(grads, 10.)[0],
+        lambda: grads)
+    self.optimizer = opt.apply_gradients(zip(grads,t_vars))
+
 
   def partial_fit(self, X):
     """Train model based on mini-batch of input data.
@@ -162,9 +170,9 @@ class VAE():
     Return cost of mini-batch.
     """
 
-    opt, cost, vae_loss_likelihood, vae_loss_kl, _ = self.sess.run((self.optimizer, self.cost, self.vae_loss_likelihood, self.vae_loss_kl, self.check),
+    opt, cost, vae_loss_likelihood, vae_loss_kl, _, gradnorm = self.sess.run((self.optimizer, self.cost, self.vae_loss_likelihood, self.vae_loss_kl, self.check, self.gradnorm),
                               feed_dict={self.x_raw: X})
-    return cost, vae_loss_likelihood, vae_loss_kl
+    return cost, vae_loss_likelihood, vae_loss_kl, gradnorm
 
   def transform(self, X):
     """Transform data by mapping it into the latent space."""
@@ -189,6 +197,11 @@ class VAE():
   def reconstruct(self, X):
     """ Use VAE to reconstruct given data. """
     return self.sess.run(self.x_reconstr_mean,
+                         feed_dict={self.x_raw: X})
+
+  def encode(self, X):
+    """ Use VAE to reconstruct given data. """
+    return self.sess.run((self.z_mean,self.z_log_sigma_sq),
                          feed_dict={self.x_raw: X})
 
   def save_model(self, checkpoint_path, epoch):

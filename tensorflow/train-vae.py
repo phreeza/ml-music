@@ -134,8 +134,8 @@ def train(args):
     # Display logs per epoch step
     print "Epoch:", '%04d' % (epoch+1), \
           "total loss =", "{:.6f}".format(avg_cost), \
-          "likelihood_loss =", "{:.6f}".format(avg_likelihood_loss), \
-          "kl_loss =", "{:.6f}".format(avg_kl_loss)
+          "likelihood_loss =", "{:.6f}".format(avg_likelihood_loss.mean()), \
+          "kl_loss =", "{:.6f}".format(avg_kl_loss.mean())
 
     # save model
     if epoch > 0 and epoch % checkpoint_step == 0:

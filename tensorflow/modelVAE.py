@@ -133,7 +133,6 @@ class VAE():
     #      -tf.reduce_sum(orig_image * tf.log(1e-10 + new_image)
     #                     + (1-orig_image) * tf.log(1e-10 + 1 - new_image), 1)
 
-    self.vae_loss_likelihood = tf.reduce_mean(self.vae_loss_likelihood) / self.n_points # average over batch and pixel
 
     # 2.) The latent loss, which is defined as the Kullback Leibler divergence
     ##    between the distribution in latent space induced by the encoder on
@@ -145,9 +144,7 @@ class VAE():
                                        - tf.square(self.z_mean)
                                        - tf.exp(tf.minimum(20.,self.z_log_sigma_sq)), 1)
 
-    self.vae_loss_kl = tf.reduce_mean(self.vae_loss_kl) / self.n_points
-
-    self.cost = self.vae_loss_likelihood + self.vae_loss_kl   # average over batch
+    self.cost = tf.reduce_mean(self.vae_loss_likelihood + self.vae_loss_kl) # average over batch
 
     #self.cost = tf.reduce_mean(self.vae_loss_kl + self.vae_loss_l2)
 
@@ -159,7 +156,7 @@ class VAE():
     self.gradnorm = tf.global_norm(grads)
     grads = tf.cond(
         tf.global_norm(grads) > 1e-20,
-        lambda: tf.clip_by_global_norm(grads, 10.)[0],
+        lambda: tf.clip_by_global_norm(grads, 500.)[0],
         lambda: grads)
     self.optimizer = opt.apply_gradients(zip(grads,t_vars))
 

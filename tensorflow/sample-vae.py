@@ -17,13 +17,13 @@ from matplotlib import pyplot as plt
 
 data , means, stds = util.load_augment_data(util.loadf('../mp3/Kimiko Ishizaka - J.S. Bach- -Open- Goldberg Variations, BWV 988 (Piano) - 01 Aria.mp3'),1024)
 
-vae = VAE(z_dim=1024,net_size=1024,chunk_samples=1024)
+vae = VAE(z_dim=256,net_size=512,chunk_samples=1024)
 ckpt = tf.train.get_checkpoint_state('save-vae')
 vae.load_model('save-vae')
 
 x = np.zeros((2000,1024))
-vz = np.random.randn(1,1024)
-z = np.random.randn(1,1024)
+vz = np.random.randn(1,256)
+z = np.random.randn(1,256)
 zh = []
 for n in range(2000):
     z += 0.08*(-0.5*z + 3*np.random.randn(*z.shape))

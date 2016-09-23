@@ -43,6 +43,7 @@ class VAE():
 
     # tf Graph batch of image (batch_size, height, width, depth)
     self.x_raw = tf.placeholder(tf.float32, [batch_size, self.chunk_samples])
+    self.lamb = tf.placeholder(tf.float32, [])
 
     # distort raw data (decided in the end to leave this task to DataLoader class)
     self.x = self.x_raw
@@ -134,7 +135,7 @@ class VAE():
                                        - tf.square(self.z_mean)
                                        - tf.exp(tf.minimum(20.,self.z_log_sigma_sq)), 1)
 
-    self.cost = tf.reduce_mean(self.vae_loss_likelihood + 0.5*self.vae_loss_kl) # average over batch
+    self.cost = tf.reduce_mean(self.vae_loss_likelihood + self.lamb*self.vae_loss_kl) # average over batch
 
     #self.cost = tf.reduce_mean(self.vae_loss_kl + self.vae_loss_l2)
 
@@ -151,14 +152,17 @@ class VAE():
     self.optimizer = opt.apply_gradients(zip(grads,t_vars))
 
 
-  def partial_fit(self, X):
+  def partial_fit(self, X, lamb = 1.0):
     """Train model based on mini-batch of input data.
 
     Return cost of mini-batch.
     """
 
-    opt, cost, vae_loss_likelihood, vae_loss_kl, _, gradnorm, stddev = self.sess.run((self.optimizer, self.cost, self.vae_loss_likelihood, self.vae_loss_kl, self.check, self.gradnorm, self.x_reconstr_stddev),
-                              feed_dict={self.x_raw: X})
+    opt, cost, vae_loss_likelihood, vae_loss_kl, _, gradnorm, stddev = self.sess.run(
+        (self.optimizer, self.cost, self.vae_loss_likelihood,
+                   self.vae_loss_kl, self.check, self.gradnorm,
+                   self.x_reconstr_stddev), feed_dict={self.x_raw: X,
+                                                       self.lamb: lamb})
     return cost, vae_loss_likelihood, vae_loss_kl, gradnorm, stddev
 
   def transform(self, X):

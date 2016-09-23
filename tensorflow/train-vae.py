@@ -80,7 +80,7 @@ def train(args):
   if args.diff_mode == 1:
       diff_mode = True
 
-  dirname = 'save-vae-small'
+  dirname = 'save-vae'
   if not os.path.exists(dirname):
     os.makedirs(dirname)
 
@@ -115,7 +115,7 @@ def train(args):
       batch_xs = data[np.random.randint(data.shape[0],size=batch_size),:args.chunk_samples]
      # batch_xs = np.sin(np.arange(args.chunk_samples)[:,np.newaxis]*np.random.random((1,batch_size))+2*np.pi*np.random.random((1,batch_size))).T
       # Fit training using batch data
-      cost, likelihood_loss, kl_loss, gradnorm, stddev_batch = vae.partial_fit(batch_xs)
+      cost, likelihood_loss, kl_loss, gradnorm, stddev_batch = vae.partial_fit(batch_xs, lamb = 1. - 100./(epoch+101))
       #if gradnorm > 1.:
       #    print gradnorm
 

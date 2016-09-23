@@ -18,8 +18,9 @@ from matplotlib import pyplot as plt
 data , means, stds = util.load_augment_data(util.loadf('../mp3/Kimiko Ishizaka - J.S. Bach- -Open- Goldberg Variations, BWV 988 (Piano) - 01 Aria.mp3'),1024)
 
 vae = VAE(z_dim=256,net_size=2*256,chunk_samples=1024)
-ckpt = tf.train.get_checkpoint_state('save')
-vae.load_model('save')
+dirname = 'save-vae'
+ckpt = tf.train.get_checkpoint_state(dirname)
+vae.load_model(dirname)
 
 x = np.zeros((2000,1024))
 vz = np.random.randn(1,20)

@@ -80,7 +80,7 @@ def train(args):
   if args.diff_mode == 1:
       diff_mode = True
 
-  dirname = 'save-vae'
+  dirname = 'save-vae-small'
   if not os.path.exists(dirname):
     os.makedirs(dirname)
 
@@ -101,6 +101,7 @@ def train(args):
     avg_cost = 0.
     avg_likelihood_loss = 0.
     avg_kl_loss = 0.
+    avg_stddev = 0.
     # Loop over all batches
     if epoch%4 == 0:
         data = []
@@ -114,14 +115,15 @@ def train(args):
       batch_xs = data[np.random.randint(data.shape[0],size=batch_size),:args.chunk_samples]
      # batch_xs = np.sin(np.arange(args.chunk_samples)[:,np.newaxis]*np.random.random((1,batch_size))+2*np.pi*np.random.random((1,batch_size))).T
       # Fit training using batch data
-      cost, likelihood_loss, kl_loss, gradnorm = vae.partial_fit(batch_xs)
-      if gradnorm > 1.:
-          print gradnorm
+      cost, likelihood_loss, kl_loss, gradnorm, stddev_batch = vae.partial_fit(batch_xs)
+      #if gradnorm > 1.:
+      #    print gradnorm
 
       # Compute average loss
       avg_cost += cost /(data.shape[0]/batch_size) 
       avg_likelihood_loss += likelihood_loss /(data.shape[0]/batch_size)
       avg_kl_loss += kl_loss /(data.shape[0]/batch_size)
+      avg_stddev += stddev_batch /(data.shape[0]/batch_size)
 
       # Display logs per batch
       '''
@@ -134,12 +136,13 @@ def train(args):
     # Display logs per epoch step
     print "Epoch:", '%04d' % (epoch+1), \
           "total loss =", "{:.6f}".format(avg_cost), \
+          "stddev =", "{:.6f}".format(avg_stddev), \
           "likelihood_loss =", "{:.6f}".format(avg_likelihood_loss.mean()), \
           "kl_loss =", "{:.6f}".format(avg_kl_loss.mean())
 
     # save model
     if epoch > 0 and epoch % checkpoint_step == 0:
-      checkpoint_path = os.path.join('save-vae', 'model.ckpt')
+      checkpoint_path = os.path.join(dirname, 'model.ckpt')
       vae.save_model(checkpoint_path, epoch)
       print "model saved to {}".format(checkpoint_path)
 

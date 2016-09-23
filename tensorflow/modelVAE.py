@@ -79,6 +79,7 @@ class VAE():
     # Use generator to determine mean of
     # Bernoulli distribution of reconstructed input
     self.x_reconstr_mean, self.x_reconstr_log_sigma_sq = self._generator_network(self.z)
+    self.x_reconstr_stddev = tf.reduce_mean(tf.sqrt(tf.exp(self.x_reconstr_log_sigma_sq)))
 
   def _recognition_network(self, x):
     # Generate probabilistic encoder (recognition network), which
@@ -119,20 +120,9 @@ class VAE():
     new_energies = tf.reshape(self.x_reconstr_mean, [self.batch_size, -1])
 
     diff = tf.square(tf.sub(orig_energies, new_energies))
-    diff_norm = tf.div(tf.square(diff),tf.exp(tf.minimum(20.,self.x_reconstr_log_sigma_sq)))
+    diff_norm = tf.div(diff,tf.exp(tf.minimum(20.,self.x_reconstr_log_sigma_sq)))
     denom_log = tf.log(2*np.pi) + self.x_reconstr_log_sigma_sq
     self.vae_loss_likelihood = tf.reduce_sum(0.5*(diff_norm+denom_log), 1) 
-    # use L2 loss instead:
-    #if (self.loss_mode == 1):
-    #  d = (orig_image - new_image)
-    #  d2 = tf.mul(d, d) * 10000.0
-    #  self.vae_loss_likelihood = tf.reduce_sum(d2, 1)
-    #else:
-    #  new_image = tf.nn.sigmoid(new_image)
-    #  self.vae_loss_likelihood = \
-    #      -tf.reduce_sum(orig_image * tf.log(1e-10 + new_image)
-    #                     + (1-orig_image) * tf.log(1e-10 + 1 - new_image), 1)
-
 
     # 2.) The latent loss, which is defined as the Kullback Leibler divergence
     ##    between the distribution in latent space induced by the encoder on
@@ -144,14 +134,14 @@ class VAE():
                                        - tf.square(self.z_mean)
                                        - tf.exp(tf.minimum(20.,self.z_log_sigma_sq)), 1)
 
-    self.cost = tf.reduce_mean(self.vae_loss_likelihood + self.vae_loss_kl) # average over batch
+    self.cost = tf.reduce_mean(self.vae_loss_likelihood + 0.5*self.vae_loss_kl) # average over batch
 
     #self.cost = tf.reduce_mean(self.vae_loss_kl + self.vae_loss_l2)
 
     self.t_vars = tf.trainable_variables()
 
     # Use RMSProp optimizer
-    opt = tf.train.RMSPropOptimizer(self.learning_rate) #.minimize(self.cost, var_list=self.t_vars)
+    opt = tf.train.AdamOptimizer(self.learning_rate) #.minimize(self.cost, var_list=self.t_vars)
     grads, t_vars = zip(*opt.compute_gradients(self.cost, self.t_vars))
     self.gradnorm = tf.global_norm(grads)
     grads = tf.cond(
@@ -167,9 +157,9 @@ class VAE():
     Return cost of mini-batch.
     """
 
-    opt, cost, vae_loss_likelihood, vae_loss_kl, _, gradnorm = self.sess.run((self.optimizer, self.cost, self.vae_loss_likelihood, self.vae_loss_kl, self.check, self.gradnorm),
+    opt, cost, vae_loss_likelihood, vae_loss_kl, _, gradnorm, stddev = self.sess.run((self.optimizer, self.cost, self.vae_loss_likelihood, self.vae_loss_kl, self.check, self.gradnorm, self.x_reconstr_stddev),
                               feed_dict={self.x_raw: X})
-    return cost, vae_loss_likelihood, vae_loss_kl, gradnorm
+    return cost, vae_loss_likelihood, vae_loss_kl, gradnorm, stddev
 
   def transform(self, X):
     """Transform data by mapping it into the latent space."""

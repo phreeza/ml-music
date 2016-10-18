@@ -86,7 +86,7 @@ def loadf(fname):
     data = data.astype(np.float64).reshape((-1,2))
     data = data.mean(axis=1)
     data -= data.mean(axis=0)
-    data /= data.std(axis=0) * 3.
+    data /= data.std(axis=0)
     return data
 
 def load_augment_data(trace,N=1024):

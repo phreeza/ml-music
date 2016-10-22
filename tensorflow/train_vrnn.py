@@ -15,6 +15,8 @@ def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('--rnn_size', type=int, default=800,
                      help='size of RNN hidden state')
+  parser.add_argument('--latent_size', type=int, default=800,
+                     help='size of latent space')
   parser.add_argument('--batch_size', type=int, default=25,
                      help='minibatch size')
   parser.add_argument('--seq_length', type=int, default=300,
@@ -58,11 +60,9 @@ def next_val_batch(data, args):
     return np.array(x_batch), np.array(y_batch)
 
 def train(args):
-    fnames = glob.glob('../mp3/*.mp3')[:3]
+    fnames = glob.glob('../mp3/*.mp3')[:1]
     traces = [util.loadf(fname) for fname in fnames]
     traces = np.hstack(traces)
-    print traces.shape
-    print fnames
     dirname = 'save-vrnn'
     if not os.path.exists(dirname):
       os.makedirs(dirname)
@@ -90,9 +90,14 @@ def train(args):
                 #t0 = np.random.randn(args.batch_size,1,(args.chunk_samples))
                 #x = np.sin(2*np.pi*(np.arange(args.seq_length)[np.newaxis,:,np.newaxis]/30.+t0)) + np.random.randn(args.batch_size,args.seq_length,(args.chunk_samples))*0.1
                 #y = np.sin(2*np.pi*(np.arange(1,args.seq_length+1)[np.newaxis,:,np.newaxis]/30.+t0)) + np.random.randn(args.batch_size,args.seq_length,(args.chunk_samples))*0.1
-                if b%25 == 0:
+                if (e * 100 + b)%int(traces.shape[0]/(args.chunk_samples*args.batch_size)) == 0:
                     data, _, _ = util.load_augment_data(traces,args.chunk_samples)
-                x,y = next_batch(data,args)
+                    print "Refreshed data"
+                #x,y = next_batch(data,args)
+                slopes = 10*np.random.random((1,1,2*args.chunk_samples))+1
+                x,y = (slopes*np.arange(args.seq_length)[np.newaxis,:,np.newaxis])-1,(slopes*np.arange(args.seq_length)[np.newaxis,:,np.newaxis])
+                y[:,:,args.chunk_samples:] = 0.
+                x[:,:,args.chunk_samples:] = 0.
                 feed = {model.input_data: x, model.target_data: y}
                 train_loss, _, cr, summary, sigma = sess.run([model.cost, model.train_op, check, merged, model.sigma], feed)
                 #train_loss, state, _ = sess.run([model.cost, model.final_state, model.train_op], feed)
@@ -105,7 +110,7 @@ def train(args):
                 print "{}/{} (epoch {}), train_loss = {:.6f}, time/batch = {:.1f}, std = {:.3f}/{:.3f}" \
                     .format(e * 100 + b,
                             args.num_epochs * 100,
-                            e, 1024*train_loss, end - start, (sigma[:,200:]).mean(axis=0).mean(axis=0),(sigma[:,:200]).mean(axis=0).mean(axis=0))
+                            e, args.chunk_samples*train_loss, end - start, (sigma[:,200:]).mean(axis=0).mean(axis=0),(sigma[:,:200]).mean(axis=0).mean(axis=0))
                 start = time.time()
 
 if __name__ == '__main__':
